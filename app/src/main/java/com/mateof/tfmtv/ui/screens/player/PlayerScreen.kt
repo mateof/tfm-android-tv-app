@@ -31,6 +31,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import com.mateof.tfmtv.data.prefs.ServerPreferences
+import com.mateof.tfmtv.ui.components.tapClick
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
@@ -132,7 +133,7 @@ fun PlayerScreen(url: String, title: String, onBack: () -> Unit) {
         )
         Button(
             onClick = vm::cycleResizeMode,
-            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp)
+            modifier = Modifier.align(Alignment.TopEnd).padding(24.dp).tapClick(vm::cycleResizeMode)
         ) {
             Text(
                 when (resizeMode) {

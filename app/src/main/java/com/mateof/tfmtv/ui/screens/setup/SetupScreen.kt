@@ -35,6 +35,7 @@ import androidx.lifecycle.viewModelScope
 import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
+import com.mateof.tfmtv.ui.components.tapClick
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
@@ -165,7 +166,7 @@ fun SetupScreen(onDone: () -> Unit) {
                     focusedContainerColor = MaterialTheme.colorScheme.primary,
                     focusedContentColor = MaterialTheme.colorScheme.onPrimary
                 ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().tapClick(vm::connect)
             ) {
                 Text(if (state.testing) "Conectando…" else "Conectar")
             }

@@ -35,6 +35,7 @@ import com.mateof.tfmtv.ui.components.FolderCard
 import com.mateof.tfmtv.ui.components.Loading
 import com.mateof.tfmtv.ui.components.VideoCard
 import com.mateof.tfmtv.ui.components.subtitle
+import com.mateof.tfmtv.ui.components.tapClick
 
 @Composable
 fun ChannelScreen(
@@ -204,6 +205,7 @@ private fun MessagesTab(state: ChannelState, vm: ChannelViewModel) {
 private fun TabChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
+        modifier = Modifier.tapClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(20.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer

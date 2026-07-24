@@ -39,7 +39,7 @@ fun ChannelCard(
     modifier: Modifier = Modifier
 ) {
     val urls = rememberMediaUrls()
-    Card(onClick = onClick, modifier = modifier) {
+    Card(onClick = onClick, modifier = modifier.tapClick(onClick)) {
         Column {
             Box(
                 Modifier
@@ -91,7 +91,7 @@ fun FolderCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(onClick = onClick, modifier = modifier) {
+    Card(onClick = onClick, modifier = modifier.tapClick(onClick)) {
         Column {
             Box(
                 Modifier
@@ -134,7 +134,7 @@ fun VideoCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.tapClick(onClick),
         scale = CardDefaults.scale(focusedScale = 1.06f)
     ) {
         Column {

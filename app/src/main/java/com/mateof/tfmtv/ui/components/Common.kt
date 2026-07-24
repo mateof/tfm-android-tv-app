@@ -45,7 +45,9 @@ fun ErrorState(
                 modifier = Modifier.padding(horizontal = 48.dp)
             )
             if (onRetry != null) {
-                Button(onClick = onRetry) { Text("Reintentar") }
+                Button(onClick = onRetry, modifier = Modifier.tapClick(onRetry)) {
+                    Text("Reintentar")
+                }
             }
         }
     }

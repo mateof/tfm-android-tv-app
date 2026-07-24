@@ -32,6 +32,7 @@ import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.prefs.VideoPlayerChoice
 import com.mateof.tfmtv.media.VideoPlayers
 import com.mateof.tfmtv.media.VideoThumbnails
+import com.mateof.tfmtv.ui.components.tapClick
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,7 +116,9 @@ fun SettingsContent(onReconfigure: () -> Unit) {
             )
         }
         item {
-            Button(onClick = onReconfigure) { Text("Cambiar servidor") }
+            Button(onClick = onReconfigure, modifier = Modifier.tapClick(onReconfigure)) {
+                Text("Cambiar servidor")
+            }
         }
         item {
             SectionTitle("Reproducción de vídeo")
@@ -146,7 +149,12 @@ fun SettingsContent(onReconfigure: () -> Unit) {
             )
         }
         item {
-            Button(onClick = vm::clearThumbnails) { Text("Vaciar caché de miniaturas") }
+            Button(
+                onClick = vm::clearThumbnails,
+                modifier = Modifier.tapClick(vm::clearThumbnails)
+            ) {
+                Text("Vaciar caché de miniaturas")
+            }
         }
     }
 }
@@ -165,7 +173,7 @@ private fun SectionTitle(text: String) {
 private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().tapClick(onClick),
         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = MaterialTheme.colorScheme.surface,
