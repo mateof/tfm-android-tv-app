@@ -30,21 +30,27 @@ data class HomeState(
     val section: HomeSection = HomeSection.MINE,
     val channels: List<ChannelDto> = emptyList(),
     val folders: List<ChatFolderDto> = emptyList(),
-    val openFolderId: Long? = null
+    val openFolderId: Long? = null,
+    val search: String = ""
 ) {
     val mine: List<ChannelDto> get() = channels.filter { it.isOwner }
     val shared: List<ChannelDto> get() = channels.filter { !it.isOwner }
     val favorites: List<ChannelDto> get() = channels.filter { it.isFavorite }
 
     val visibleChannels: List<ChannelDto>
-        get() = when (section) {
-            HomeSection.MINE -> mine
-            HomeSection.SHARED -> shared
-            HomeSection.FAVORITES -> favorites
-            HomeSection.ALL -> channels
-            HomeSection.FOLDERS ->
-                folders.firstOrNull { it.id == openFolderId }?.channels ?: emptyList()
-            HomeSection.SETTINGS -> emptyList()
+        get() {
+            val list = when (section) {
+                HomeSection.MINE -> mine
+                HomeSection.SHARED -> shared
+                HomeSection.FAVORITES -> favorites
+                HomeSection.ALL -> channels
+                HomeSection.FOLDERS ->
+                    folders.firstOrNull { it.id == openFolderId }?.channels ?: emptyList()
+                HomeSection.SETTINGS -> emptyList()
+            }
+            val query = search.trim()
+            return if (query.isBlank()) list
+            else list.filter { it.name.orEmpty().contains(query, ignoreCase = true) }
         }
 }
 
@@ -77,7 +83,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun select(section: HomeSection) =
-        _state.update { it.copy(section = section, openFolderId = null) }
+        _state.update { it.copy(section = section, openFolderId = null, search = "") }
 
     fun openFolder(id: Long?) = _state.update { it.copy(openFolderId = id) }
+
+    fun setSearch(value: String) = _state.update { it.copy(search = value) }
 }

@@ -14,15 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,6 +28,7 @@ import androidx.lifecycle.viewModelScope
 import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
+import com.mateof.tfmtv.ui.components.dpadEscape
 import com.mateof.tfmtv.ui.components.tapClick
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -173,14 +167,3 @@ fun SetupScreen(onDone: () -> Unit) {
         }
     }
 }
-
-/** A focused text field eats the D-pad up/down keys, so focus has to be moved by hand. */
-private fun Modifier.dpadEscape(focusManager: FocusManager): Modifier =
-    onPreviewKeyEvent { event ->
-        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-        when (event.key) {
-            Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
-            Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
-            else -> false
-        }
-    }

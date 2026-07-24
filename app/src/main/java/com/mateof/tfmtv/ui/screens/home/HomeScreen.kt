@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -15,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,6 +37,7 @@ import com.mateof.tfmtv.ui.components.FolderCard
 import com.mateof.tfmtv.ui.components.Loading
 import com.mateof.tfmtv.ui.components.NavRail
 import com.mateof.tfmtv.ui.components.RailItem
+import com.mateof.tfmtv.ui.components.SearchField
 import com.mateof.tfmtv.ui.screens.settings.SettingsContent
 
 @Composable
@@ -74,6 +77,8 @@ fun HomeScreen(
                 else -> ChannelGrid(
                     title = sectionTitle(state),
                     channels = state.visibleChannels,
+                    search = state.search,
+                    onSearch = vm::setSearch,
                     onChannel = onChannel
                 )
             }
@@ -92,16 +97,33 @@ private fun sectionTitle(state: HomeState): String =
 private fun ChannelGrid(
     title: String,
     channels: List<com.mateof.tfmtv.data.model.ChannelDto>,
+    search: String,
+    onSearch: (String) -> Unit,
     onChannel: (Long, String) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(start = 40.dp, top = 32.dp, bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier.padding(start = 40.dp, end = 40.dp, top = 24.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f)
+            )
+            SearchField(
+                value = search,
+                onValueChange = onSearch,
+                label = "Buscar canal",
+                modifier = Modifier.width(360.dp)
+            )
+        }
         if (channels.isEmpty()) {
-            EmptyState("No hay canales en esta sección.")
+            EmptyState(
+                if (search.isBlank()) "No hay canales en esta sección."
+                else "Ningún canal coincide con «$search»."
+            )
             return@Column
         }
         LazyVerticalGrid(

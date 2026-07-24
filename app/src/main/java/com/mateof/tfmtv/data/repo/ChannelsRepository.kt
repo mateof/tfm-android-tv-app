@@ -1,6 +1,7 @@
 package com.mateof.tfmtv.data.repo
 
 import com.mateof.tfmtv.core.apiCall
+import com.mateof.tfmtv.core.apiCallPaged
 import com.mateof.tfmtv.data.api.ChannelsApi
 import com.mateof.tfmtv.data.model.ChannelDto
 import com.mateof.tfmtv.data.model.ChannelFoldersDto
@@ -13,12 +14,22 @@ import javax.inject.Singleton
 class ChannelsRepository @Inject constructor(
     private val api: ChannelsApi
 ) {
+    /**
+     * Every visible chat, page by page. The sections and the search box filter
+     * this list on the client, so a partial list silently hides channels.
+     */
     suspend fun all(): List<ChannelDto> = withContext(Dispatchers.IO) {
-        apiCall { api.list(sortBy = "name", pageSize = 200) }
-    }
-
-    suspend fun favorites(): List<ChannelDto> = withContext(Dispatchers.IO) {
-        apiCall { api.list(favoritesOnly = true, sortBy = "name", pageSize = 200) }
+        val out = mutableListOf<ChannelDto>()
+        var page = 1
+        while (page <= MAX_PAGES) {
+            val paged = apiCallPaged {
+                api.list(sortBy = "name", page = page, pageSize = PAGE_SIZE)
+            }
+            out += paged.items
+            if (paged.page?.hasNext != true) break
+            page++
+        }
+        out
     }
 
     suspend fun folders(): ChannelFoldersDto = withContext(Dispatchers.IO) {
@@ -27,5 +38,10 @@ class ChannelsRepository @Inject constructor(
 
     suspend fun details(id: Long): ChannelDto = withContext(Dispatchers.IO) {
         apiCall { api.details(id.toString()) }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 500
+        const val MAX_PAGES = 20
     }
 }
