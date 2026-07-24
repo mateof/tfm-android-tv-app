@@ -48,7 +48,6 @@ class ServerPreferences @Inject constructor(
         val API_KEY = stringPreferencesKey("api_key")
         val CONFIGURED = booleanPreferencesKey("configured")
         val VIDEO_PLAYER = stringPreferencesKey("video_player")
-        val THUMBNAILS = booleanPreferencesKey("thumbnails")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,11 +73,6 @@ class ServerPreferences @Inject constructor(
         .map { it[Keys.VIDEO_PLAYER] ?: VideoPlayerChoice.INTERNAL }
         .stateIn(scope, SharingStarted.Eagerly, VideoPlayerChoice.INTERNAL)
 
-    /** Frame extraction is expensive on low-end sticks, so it can be turned off. */
-    val thumbnails: StateFlow<Boolean> = context.dataStore.data
-        .map { it[Keys.THUMBNAILS] ?: true }
-        .stateIn(scope, SharingStarted.Eagerly, true)
-
     suspend fun save(baseUrl: String, apiKey: String) {
         context.dataStore.edit { p ->
             p[Keys.BASE_URL] = baseUrl.trimEnd('/')
@@ -89,10 +83,6 @@ class ServerPreferences @Inject constructor(
 
     suspend fun saveVideoPlayer(value: String) {
         context.dataStore.edit { p -> p[Keys.VIDEO_PLAYER] = value }
-    }
-
-    suspend fun saveThumbnails(value: Boolean) {
-        context.dataStore.edit { p -> p[Keys.THUMBNAILS] = value }
     }
 
     suspend fun awaitLoaded(): ServerConfig = configFlow.first()

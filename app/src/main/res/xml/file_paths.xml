@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- App-private external files dir, where downloaded update APKs land. -->
+    <external-files-path name="updates" path="updates/" />
+</paths>

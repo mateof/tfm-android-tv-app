@@ -30,7 +30,6 @@ import coil.compose.SubcomposeAsyncImage
 import com.mateof.tfmtv.core.Format
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.ChannelDto
-import com.mateof.tfmtv.media.VideoFrame
 
 @Composable
 fun ChannelCard(
@@ -120,15 +119,10 @@ fun FolderCard(
     }
 }
 
-/**
- * @param thumbnail null when previews are disabled, so the card skips the
- * (expensive) remote frame extraction entirely.
- */
 @Composable
 fun VideoCard(
     title: String,
     subtitle: String,
-    thumbnail: VideoFrame?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -145,18 +139,7 @@ fun VideoCard(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                if (thumbnail != null) {
-                    SubcomposeAsyncImage(
-                        model = thumbnail,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        loading = { PlaceholderIcon(Icons.Outlined.Movie) },
-                        error = { PlaceholderIcon(Icons.Outlined.Movie) }
-                    )
-                } else {
-                    PlaceholderIcon(Icons.Outlined.Movie)
-                }
+                PlaceholderIcon(Icons.Outlined.Movie)
                 Icon(
                     imageVector = Icons.Outlined.PlayCircle,
                     contentDescription = null,

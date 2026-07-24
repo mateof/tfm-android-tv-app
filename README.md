@@ -9,11 +9,15 @@ screen and play the videos stored in them.
 - **Folder navigation** inside each channel, showing only videos.
 - **All videos** view: every video in the channel, newest first.
 - **Messages** view: channel messages that carry a video, newest first, with previews.
-- **Video previews** extracted from the stream itself (the server exposes no thumbnail
-  endpoint), cached on disk and switchable off for low-powered sticks.
 - **Playback choice**: built-in player (ExoPlayer + FFmpeg software decoders via NextLib),
   VLC or any other installed player, the system default, or ask every time.
-- D-pad first UI built with Compose for TV.
+- **In-app updates**: settings can check GitHub Releases, download the APK and hand it to
+  the package installer.
+- D-pad first UI built with Compose for TV, also usable by touch.
+
+Video cards show a generic icon rather than a frame of the video: the server exposes no
+thumbnail endpoint, and extracting a frame from the stream made it download the whole
+file.
 
 ## Requirements
 

@@ -143,7 +143,6 @@ private fun FolderTab(state: ChannelState, vm: ChannelViewModel) {
             VideoCard(
                 title = file.name,
                 subtitle = file.subtitle(),
-                thumbnail = vm.thumbnailFor(file),
                 onClick = { vm.play(file) }
             )
         }
@@ -166,7 +165,6 @@ private fun VideoGrid(videos: List<ApiFileDto>, empty: String, vm: ChannelViewMo
             VideoCard(
                 title = file.name,
                 subtitle = file.subtitle(),
-                thumbnail = vm.thumbnailFor(file),
                 onClick = { vm.play(file) }
             )
         }
@@ -194,7 +192,6 @@ private fun MessagesTab(state: ChannelState, vm: ChannelViewModel) {
                     Format.date(msg.date).takeIf { it.isNotBlank() },
                     Format.bytes(msg.fileSize).takeIf { it.isNotBlank() }
                 ).joinToString(" · "),
-                thumbnail = vm.fileFor(msg)?.let { vm.thumbnailFor(it) },
                 onClick = { vm.play(msg) }
             )
         }

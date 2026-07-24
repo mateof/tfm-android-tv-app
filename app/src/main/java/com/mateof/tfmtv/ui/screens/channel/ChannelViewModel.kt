@@ -6,10 +6,8 @@ import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.BreadcrumbDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
-import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.repo.MediaUrls
 import com.mateof.tfmtv.data.repo.VideoRepository
-import com.mateof.tfmtv.media.VideoFrame
 import com.mateof.tfmtv.media.VideoPlayers
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -39,8 +37,7 @@ data class ChannelState(
     val allVideos: List<ApiFileDto> = emptyList(),
     val messages: List<ChannelMessageDto> = emptyList(),
     val filesByMessage: Map<Long, ApiFileDto> = emptyMap(),
-    val resolving: Boolean = false,
-    val thumbnails: Boolean = true
+    val resolving: Boolean = false
 )
 
 sealed interface PlayEvent {
@@ -53,23 +50,16 @@ sealed interface PlayEvent {
 class ChannelViewModel @Inject constructor(
     private val repo: VideoRepository,
     private val mediaUrls: MediaUrls,
-    private val players: VideoPlayers,
-    private val prefs: ServerPreferences
+    private val players: VideoPlayers
 ) : ViewModel() {
 
     private var channelId: Long = 0
 
-    private val _state = MutableStateFlow(ChannelState(thumbnails = prefs.thumbnails.value))
+    private val _state = MutableStateFlow(ChannelState())
     val state: StateFlow<ChannelState> = _state.asStateFlow()
 
     private val _events = Channel<PlayEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
-
-    init {
-        viewModelScope.launch {
-            prefs.thumbnails.collect { value -> _state.update { it.copy(thumbnails = value) } }
-        }
-    }
 
     fun start(id: Long) {
         if (channelId == id) return
@@ -163,13 +153,8 @@ class ChannelViewModel @Inject constructor(
         }
     }
 
-    fun fileFor(message: ChannelMessageDto): ApiFileDto? = _state.value.filesByMessage[message.id]
-
-    fun thumbnailFor(file: ApiFileDto): VideoFrame? {
-        if (!_state.value.thumbnails) return null
-        val url = mediaUrls.withKey(file.streamUrl ?: file.downloadUrl) ?: return null
-        return VideoFrame(url = url, id = "${channelId}:${file.id}")
-    }
+    private fun fileFor(message: ChannelMessageDto): ApiFileDto? =
+        _state.value.filesByMessage[message.id]
 
     private fun emit(event: PlayEvent) {
         viewModelScope.launch { _events.send(event) }
