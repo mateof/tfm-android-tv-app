@@ -31,6 +31,9 @@ data class ChannelState(
     val loading: Boolean = true,
     val error: String? = null,
     val path: String = "/",
+    val folderId: String? = null,
+    val parentFolderId: String? = null,
+    val parentPath: String? = null,
     val breadcrumbs: List<BreadcrumbDto> = emptyList(),
     val folders: List<ApiFileDto> = emptyList(),
     val videos: List<ApiFileDto> = emptyList(),
@@ -38,7 +41,9 @@ data class ChannelState(
     val messages: List<ChannelMessageDto> = emptyList(),
     val filesByMessage: Map<Long, ApiFileDto> = emptyMap(),
     val resolving: Boolean = false
-)
+) {
+    val canGoUp: Boolean get() = parentFolderId != null || parentPath != null
+}
 
 sealed interface PlayEvent {
     data class Internal(val url: String, val title: String) : PlayEvent
@@ -64,29 +69,36 @@ class ChannelViewModel @Inject constructor(
     fun start(id: Long) {
         if (channelId == id) return
         channelId = id
-        openFolder("/")
+        openFolder(path = "/")
     }
 
     fun selectTab(tab: ChannelTab) {
         _state.update { it.copy(tab = tab, error = null) }
         when (tab) {
             ChannelTab.FOLDERS -> if (_state.value.folders.isEmpty() && _state.value.videos.isEmpty()) {
-                openFolder(_state.value.path)
+                openFolder(folderId = _state.value.folderId, path = _state.value.path)
             }
             ChannelTab.VIDEOS -> if (_state.value.allVideos.isEmpty()) loadAllVideos()
             ChannelTab.MESSAGES -> if (_state.value.messages.isEmpty()) loadMessages()
         }
     }
 
-    fun openFolder(path: String) {
-        _state.update { it.copy(loading = true, error = null, path = path) }
+    /**
+     * Navigation goes by folder id: the `path` an item carries is its *containing*
+     * folder, so using it would always walk back to the level above.
+     */
+    fun openFolder(folderId: String? = null, path: String? = null) {
+        _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            runCatching { repo.browse(channelId, path = path) }
+            runCatching { repo.browse(channelId, path = path, folderId = folderId) }
                 .onSuccess { contents ->
                     _state.update {
                         it.copy(
                             loading = false,
-                            path = contents.currentPath ?: path,
+                            path = contents.currentPath ?: "/",
+                            folderId = contents.currentFolderId,
+                            parentFolderId = contents.parentFolderId,
+                            parentPath = contents.parentPath,
                             breadcrumbs = contents.breadcrumbs,
                             folders = contents.items.filter { item -> !item.isFile },
                             videos = contents.items.filter { item -> item.isFile }
@@ -98,10 +110,9 @@ class ChannelViewModel @Inject constructor(
     }
 
     fun up() {
-        val current = _state.value.path
-        if (current == "/" || current.isBlank()) return
-        val parent = current.trimEnd('/').substringBeforeLast('/', "").ifBlank { "/" }
-        openFolder(parent)
+        val state = _state.value
+        if (!state.canGoUp) return
+        openFolder(folderId = state.parentFolderId, path = state.parentPath)
     }
 
     private fun loadAllVideos() {

@@ -60,7 +60,7 @@ fun ChannelScreen(
         }
     }
 
-    BackHandler(enabled = state.tab == ChannelTab.FOLDERS && state.path != "/") { vm.up() }
+    BackHandler(enabled = state.tab == ChannelTab.FOLDERS && state.canGoUp) { vm.up() }
 
     Column(Modifier.fillMaxSize()) {
         Text(
@@ -136,7 +136,7 @@ private fun FolderTab(state: ChannelState, vm: ChannelViewModel) {
             FolderCard(
                 name = folder.name,
                 subtitle = "Carpeta",
-                onClick = { vm.openFolder(folder.path ?: "/") }
+                onClick = { vm.openFolder(folderId = folder.id) }
             )
         }
         items(state.videos, key = { "f-${it.id}" }) { file ->

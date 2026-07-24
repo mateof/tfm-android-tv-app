@@ -59,7 +59,7 @@ class VideoRepository @Inject constructor(
 
     /**
      * Video files keyed by the message they came from, so the messages list can
-     * show previews and play without a lookup per card.
+     * play without a lookup per card.
      */
     suspend fun videoIndex(channelId: Long): Map<Long, ApiFileDto> =
         withContext(Dispatchers.IO) {
