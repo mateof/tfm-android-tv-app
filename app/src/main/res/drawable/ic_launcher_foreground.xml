@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.55"
+        android:scaleY="0.55"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- folder base -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.92"
+            android:pathData="M18,32 a6,6 0 0 1 6,-6 h20 l8,8 h32 a6,6 0 0 1 6,6 v40 a6,6 0 0 1 -6,6 H24 a6,6 0 0 1 -6,-6 Z" />
+        <!-- paper plane cutout -->
+        <path
+            android:fillColor="#1B6FD8"
+            android:pathData="M34,62 L76,46 L63,80 L56,67 L69,53 L51,64 Z" />
+    </group>
+</vector>

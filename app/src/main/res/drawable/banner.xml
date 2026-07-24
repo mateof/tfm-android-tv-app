@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <path
+        android:pathData="M0,0 H320 V180 H0 Z"
+        android:fillColor="#0F1420" />
+
+    <!-- paper plane -->
+    <path
+        android:fillColor="#4DA8FF"
+        android:pathData="M104,90 L168,66 L148,122 L136,100 L156,78 L130,96 Z" />
+
+    <!-- play badge -->
+    <path
+        android:fillColor="#37D6C0"
+        android:pathData="M186,74 L222,94 L186,114 Z" />
+</vector>
