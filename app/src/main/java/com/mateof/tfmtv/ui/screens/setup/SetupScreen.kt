@@ -1,6 +1,5 @@
 package com.mateof.tfmtv.ui.screens.setup
 
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +14,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -29,6 +36,7 @@ import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -99,6 +107,7 @@ fun SetupScreen(onDone: () -> Unit) {
     val vm: SetupViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     val firstField = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(state.saved) { if (state.saved) onDone() }
     LaunchedEffect(Unit) { runCatching { firstField.requestFocus() } }
@@ -124,7 +133,10 @@ fun SetupScreen(onDone: () -> Unit) {
                     keyboardType = KeyboardType.Uri,
                     imeAction = ImeAction.Next
                 ),
-                modifier = Modifier.fillMaxWidth().focusRequester(firstField).focusable()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(firstField)
+                    .dpadEscape(focusManager)
             )
 
             OutlinedTextField(
@@ -133,7 +145,7 @@ fun SetupScreen(onDone: () -> Unit) {
                 label = { androidx.compose.material3.Text("API key (opcional)") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().dpadEscape(focusManager)
             )
 
             if (state.error != null) {
@@ -144,9 +156,30 @@ fun SetupScreen(onDone: () -> Unit) {
                 )
             }
 
-            Button(onClick = vm::connect, enabled = !state.testing) {
+            Button(
+                onClick = vm::connect,
+                enabled = !state.testing,
+                colors = ButtonDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    focusedContentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(if (state.testing) "Conectando…" else "Conectar")
             }
         }
     }
 }
+
+/** A focused text field eats the D-pad up/down keys, so focus has to be moved by hand. */
+private fun Modifier.dpadEscape(focusManager: FocusManager): Modifier =
+    onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        when (event.key) {
+            Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+            Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+            else -> false
+        }
+    }
