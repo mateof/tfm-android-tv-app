@@ -31,6 +31,7 @@ interface ChannelsApi {
     suspend fun list(
         @Query("onlySaved") onlySaved: Boolean = false,
         @Query("favoritesOnly") favoritesOnly: Boolean = false,
+        @Query("includeHidden") includeHidden: Boolean = false,
         @Query("search") search: String? = null,
         @Query("sortBy") sortBy: String? = null,
         @Query("sortDescending") sortDescending: Boolean = false,

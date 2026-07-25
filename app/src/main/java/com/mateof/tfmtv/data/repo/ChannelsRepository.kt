@@ -15,15 +15,21 @@ class ChannelsRepository @Inject constructor(
     private val api: ChannelsApi
 ) {
     /**
-     * Every visible chat, page by page. The sections and the search box filter
-     * this list on the client, so a partial list silently hides channels.
+     * Every chat, page by page. The sections and the search box filter this list
+     * on the client, so a partial list silently hides channels. [includeHidden]
+     * overrides the server's own "show hidden channels" setting.
      */
-    suspend fun all(): List<ChannelDto> = withContext(Dispatchers.IO) {
+    suspend fun all(includeHidden: Boolean = false): List<ChannelDto> = withContext(Dispatchers.IO) {
         val out = mutableListOf<ChannelDto>()
         var page = 1
         while (page <= MAX_PAGES) {
             val paged = apiCallPaged {
-                api.list(sortBy = "name", page = page, pageSize = PAGE_SIZE)
+                api.list(
+                    includeHidden = includeHidden,
+                    sortBy = "name",
+                    page = page,
+                    pageSize = PAGE_SIZE
+                )
             }
             out += paged.items
             if (paged.page?.hasNext != true) break

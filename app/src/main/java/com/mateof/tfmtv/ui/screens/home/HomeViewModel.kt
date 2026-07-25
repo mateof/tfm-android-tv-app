@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.model.ChannelDto
 import com.mateof.tfmtv.data.model.ChatFolderDto
+import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.repo.ChannelsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -31,11 +32,18 @@ data class HomeState(
     val channels: List<ChannelDto> = emptyList(),
     val folders: List<ChatFolderDto> = emptyList(),
     val openFolderId: Long? = null,
-    val search: String = ""
+    val search: String = "",
+    val showHidden: Boolean = false
 ) {
-    val mine: List<ChannelDto> get() = channels.filter { it.isOwner }
-    val shared: List<ChannelDto> get() = channels.filter { !it.isOwner }
-    val favorites: List<ChannelDto> get() = channels.filter { it.isFavorite }
+    private val listed: List<ChannelDto> get() = channels.visible()
+    val mine: List<ChannelDto> get() = listed.filter { it.isOwner }
+    val shared: List<ChannelDto> get() = listed.filter { !it.isOwner }
+    val favorites: List<ChannelDto> get() = listed.filter { it.isFavorite }
+
+    fun channelCount(folder: ChatFolderDto): Int = folder.channels.visible().size
+
+    private fun List<ChannelDto>.visible(): List<ChannelDto> =
+        if (showHidden) this else filter { !it.isHidden }
 
     val visibleChannels: List<ChannelDto>
         get() {
@@ -43,9 +51,9 @@ data class HomeState(
                 HomeSection.MINE -> mine
                 HomeSection.SHARED -> shared
                 HomeSection.FAVORITES -> favorites
-                HomeSection.ALL -> channels
+                HomeSection.ALL -> listed
                 HomeSection.FOLDERS ->
-                    folders.firstOrNull { it.id == openFolderId }?.channels ?: emptyList()
+                    folders.firstOrNull { it.id == openFolderId }?.channels?.visible().orEmpty()
                 HomeSection.SETTINGS -> emptyList()
             }
             val query = search.trim()
@@ -56,19 +64,30 @@ data class HomeState(
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repo: ChannelsRepository
+    private val repo: ChannelsRepository,
+    private val prefs: ServerPreferences
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
-    init { load() }
+    init {
+        viewModelScope.launch {
+            // Reloading is needed because hidden channels only come down the wire
+            // when they are asked for.
+            prefs.showHiddenChannels.collect { show ->
+                _state.update { it.copy(showHidden = show) }
+                load()
+            }
+        }
+    }
 
     fun load() {
         _state.update { it.copy(loading = true, error = null) }
+        val includeHidden = _state.value.showHidden
         viewModelScope.launch {
             runCatching {
-                val channels = async { repo.all() }
+                val channels = async { repo.all(includeHidden = includeHidden) }
                 // Chat folders are optional: a server without them still works.
                 val folders = async { runCatching { repo.folders().folders }.getOrDefault(emptyList()) }
                 channels.await() to folders.await()

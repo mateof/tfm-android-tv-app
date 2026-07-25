@@ -163,7 +163,7 @@ private fun FolderGrid(state: HomeState, onOpen: (Long) -> Unit) {
             items(state.folders, key = { it.id }) { folder ->
                 FolderCard(
                     name = listOfNotNull(folder.iconEmoji, folder.title).joinToString(" "),
-                    subtitle = "${folder.channelCount} canales",
+                    subtitle = "${state.channelCount(folder)} canales",
                     onClick = { onOpen(folder.id) }
                 )
             }

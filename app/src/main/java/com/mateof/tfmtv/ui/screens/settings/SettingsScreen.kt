@@ -58,6 +58,7 @@ data class SettingsState(
     val baseUrl: String = "",
     val videoPlayer: String = VideoPlayerChoice.INTERNAL,
     val videoApps: List<VideoPlayers.PlayerApp> = emptyList(),
+    val showHiddenChannels: Boolean = false,
     val appVersion: String = "",
     val update: UpdateState = UpdateState()
 )
@@ -74,6 +75,7 @@ class SettingsViewModel @Inject constructor(
             baseUrl = prefs.current.baseUrl,
             videoPlayer = prefs.videoPlayer.value,
             videoApps = players.installed(),
+            showHiddenChannels = prefs.showHiddenChannels.value,
             appVersion = updater.currentVersion
         )
     )
@@ -86,9 +88,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.configFlow.collect { c -> _state.update { it.copy(baseUrl = c.baseUrl) } }
         }
+        viewModelScope.launch {
+            prefs.showHiddenChannels.collect { v ->
+                _state.update { it.copy(showHiddenChannels = v) }
+            }
+        }
     }
 
     fun setVideoPlayer(value: String) = viewModelScope.launch { prefs.saveVideoPlayer(value) }
+
+    fun toggleHiddenChannels() = viewModelScope.launch {
+        prefs.saveShowHiddenChannels(!_state.value.showHiddenChannels)
+    }
 
     fun checkUpdates() {
         _state.update { it.copy(update = UpdateState(phase = UpdatePhase.CHECKING)) }
@@ -189,6 +200,16 @@ fun SettingsContent(onReconfigure: () -> Unit) {
                 label = label,
                 selected = state.videoPlayer == value,
                 onClick = { vm.setVideoPlayer(value) }
+            )
+        }
+        item {
+            SectionTitle("Canales")
+        }
+        item {
+            ChoiceRow(
+                label = "Mostrar canales ocultos",
+                selected = state.showHiddenChannels,
+                onClick = vm::toggleHiddenChannels
             )
         }
         item {

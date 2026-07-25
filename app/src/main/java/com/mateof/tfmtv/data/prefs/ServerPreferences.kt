@@ -48,6 +48,7 @@ class ServerPreferences @Inject constructor(
         val API_KEY = stringPreferencesKey("api_key")
         val CONFIGURED = booleanPreferencesKey("configured")
         val VIDEO_PLAYER = stringPreferencesKey("video_player")
+        val SHOW_HIDDEN = booleanPreferencesKey("show_hidden_channels")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -73,6 +74,11 @@ class ServerPreferences @Inject constructor(
         .map { it[Keys.VIDEO_PLAYER] ?: VideoPlayerChoice.INTERNAL }
         .stateIn(scope, SharingStarted.Eagerly, VideoPlayerChoice.INTERNAL)
 
+    /** Channels hidden on the server stay out of the lists unless this is on. */
+    val showHiddenChannels: StateFlow<Boolean> = context.dataStore.data
+        .map { it[Keys.SHOW_HIDDEN] ?: false }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
     suspend fun save(baseUrl: String, apiKey: String) {
         context.dataStore.edit { p ->
             p[Keys.BASE_URL] = baseUrl.trimEnd('/')
@@ -83,6 +89,10 @@ class ServerPreferences @Inject constructor(
 
     suspend fun saveVideoPlayer(value: String) {
         context.dataStore.edit { p -> p[Keys.VIDEO_PLAYER] = value }
+    }
+
+    suspend fun saveShowHiddenChannels(value: Boolean) {
+        context.dataStore.edit { p -> p[Keys.SHOW_HIDDEN] = value }
     }
 
     suspend fun awaitLoaded(): ServerConfig = configFlow.first()

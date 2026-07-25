@@ -47,6 +47,7 @@ data class ChannelDto(
     val type: String? = null,
     val isOwner: Boolean = false,
     val isFavorite: Boolean = false,
+    val isHidden: Boolean = false,
     val imageUrl: String? = null,
     val hasDatabase: Boolean = false,
     val fileCount: Long? = null,
