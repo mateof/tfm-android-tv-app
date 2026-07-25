@@ -21,6 +21,8 @@ class VideoRepository @Inject constructor(
         channelId: Long,
         path: String? = null,
         folderId: String? = null,
+        sortBy: String = "name",
+        sortDescending: Boolean = false,
         page: Int = 1
     ): FolderContentsDto = withContext(Dispatchers.IO) {
         apiCall {
@@ -29,8 +31,8 @@ class VideoRepository @Inject constructor(
                 path = path,
                 folderId = folderId,
                 filter = "video",
-                sortBy = "date",
-                sortDescending = true,
+                sortBy = sortBy,
+                sortDescending = sortDescending,
                 page = page,
                 pageSize = PAGE_SIZE
             )
@@ -42,15 +44,20 @@ class VideoRepository @Inject constructor(
      * but needs a non-empty term, and it matches with `contains`, so a dot hits
      * anything carrying a file extension.
      */
-    suspend fun allVideos(channelId: Long, page: Int = 1): List<ApiFileDto> =
+    suspend fun allVideos(
+        channelId: Long,
+        sortBy: String = "date",
+        sortDescending: Boolean = true,
+        page: Int = 1
+    ): List<ApiFileDto> =
         withContext(Dispatchers.IO) {
             apiCall {
                 files.search(
                     channelId = channelId.toString(),
                     q = ".",
                     filter = "video",
-                    sortBy = "date",
-                    sortDescending = true,
+                    sortBy = sortBy,
+                    sortDescending = sortDescending,
                     page = page,
                     pageSize = PAGE_SIZE
                 )

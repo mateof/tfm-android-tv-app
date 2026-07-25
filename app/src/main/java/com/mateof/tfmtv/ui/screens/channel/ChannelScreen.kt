@@ -1,6 +1,8 @@
 package com.mateof.tfmtv.ui.screens.channel
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,6 +81,28 @@ fun ChannelScreen(
                     label = tab.label,
                     selected = state.tab == tab,
                     onClick = { vm.selectTab(tab) }
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 40.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Orden",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 6.dp)
+            )
+            SortOption.entries.forEach { option ->
+                TabChip(
+                    label = option.label,
+                    selected = state.sort == option,
+                    onClick = { vm.setSort(option) }
                 )
             }
         }
@@ -183,7 +208,7 @@ private fun MessagesTab(state: ChannelState, vm: ChannelViewModel) {
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        items(state.messages, key = { it.id }) { msg ->
+        items(state.sortedMessages, key = { it.id }) { msg ->
             VideoCard(
                 title = msg.fileName?.takeIf { it.isNotBlank() }
                     ?: msg.text?.takeIf { it.isNotBlank() }

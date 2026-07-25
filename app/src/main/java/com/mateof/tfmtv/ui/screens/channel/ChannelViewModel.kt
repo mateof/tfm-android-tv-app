@@ -26,6 +26,23 @@ enum class ChannelTab(val label: String) {
     MESSAGES("Mensajes")
 }
 
+enum class SortField(val query: String) { NAME("name"), DATE("date"), SIZE("size") }
+
+enum class SortOption(val label: String, val field: SortField, val descending: Boolean) {
+    NAME_ASC("Nombre A-Z", SortField.NAME, false),
+    NAME_DESC("Nombre Z-A", SortField.NAME, true),
+    NEWEST("Más nuevos", SortField.DATE, true),
+    OLDEST("Más antiguos", SortField.DATE, false),
+    LARGEST("Más grandes", SortField.SIZE, true),
+    SMALLEST("Más pequeños", SortField.SIZE, false)
+}
+
+private val defaultSorts = mapOf(
+    ChannelTab.FOLDERS to SortOption.NAME_ASC,
+    ChannelTab.VIDEOS to SortOption.NEWEST,
+    ChannelTab.MESSAGES to SortOption.NEWEST
+)
+
 data class ChannelState(
     val tab: ChannelTab = ChannelTab.FOLDERS,
     val loading: Boolean = true,
@@ -40,9 +57,24 @@ data class ChannelState(
     val allVideos: List<ApiFileDto> = emptyList(),
     val messages: List<ChannelMessageDto> = emptyList(),
     val filesByMessage: Map<Long, ApiFileDto> = emptyMap(),
-    val resolving: Boolean = false
+    val resolving: Boolean = false,
+    val sorts: Map<ChannelTab, SortOption> = defaultSorts
 ) {
     val canGoUp: Boolean get() = parentFolderId != null || parentPath != null
+
+    val sort: SortOption get() = sorts[tab] ?: SortOption.NAME_ASC
+
+    /** The messages endpoint has no sort parameter, so they are ordered here. */
+    val sortedMessages: List<ChannelMessageDto>
+        get() {
+            val option = sorts[ChannelTab.MESSAGES] ?: SortOption.NEWEST
+            val ascending = when (option.field) {
+                SortField.NAME -> messages.sortedBy { it.fileName.orEmpty().lowercase() }
+                SortField.DATE -> messages.sortedBy { it.date.orEmpty() }
+                SortField.SIZE -> messages.sortedBy { it.fileSize ?: 0L }
+            }
+            return if (option.descending) ascending.asReversed() else ascending
+        }
 }
 
 sealed interface PlayEvent {
@@ -83,14 +115,36 @@ class ChannelViewModel @Inject constructor(
         }
     }
 
+    fun setSort(option: SortOption) {
+        val tab = _state.value.tab
+        if (_state.value.sort == option) return
+        _state.update { it.copy(sorts = it.sorts + (tab to option)) }
+        when (tab) {
+            ChannelTab.FOLDERS ->
+                openFolder(folderId = _state.value.folderId, path = _state.value.path)
+            ChannelTab.VIDEOS -> loadAllVideos()
+            // Messages are already loaded; ChannelState sorts them.
+            ChannelTab.MESSAGES -> Unit
+        }
+    }
+
     /**
      * Navigation goes by folder id: the `path` an item carries is its *containing*
      * folder, so using it would always walk back to the level above.
      */
     fun openFolder(folderId: String? = null, path: String? = null) {
         _state.update { it.copy(loading = true, error = null) }
+        val sort = _state.value.sorts[ChannelTab.FOLDERS] ?: SortOption.NAME_ASC
         viewModelScope.launch {
-            runCatching { repo.browse(channelId, path = path, folderId = folderId) }
+            runCatching {
+                repo.browse(
+                    channelId,
+                    path = path,
+                    folderId = folderId,
+                    sortBy = sort.field.query,
+                    sortDescending = sort.descending
+                )
+            }
                 .onSuccess { contents ->
                     _state.update {
                         it.copy(
@@ -117,8 +171,15 @@ class ChannelViewModel @Inject constructor(
 
     private fun loadAllVideos() {
         _state.update { it.copy(loading = true, error = null) }
+        val sort = _state.value.sorts[ChannelTab.VIDEOS] ?: SortOption.NEWEST
         viewModelScope.launch {
-            runCatching { repo.allVideos(channelId) }
+            runCatching {
+                repo.allVideos(
+                    channelId,
+                    sortBy = sort.field.query,
+                    sortDescending = sort.descending
+                )
+            }
                 .onSuccess { list -> _state.update { it.copy(loading = false, allVideos = list) } }
                 .onFailure { e -> fail(e) }
         }
