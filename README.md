@@ -1,5 +1,15 @@
 # TFM TV
 
+<p align="center">
+  <a href="https://github.com/mateof/tfm-android-tv-app/actions/workflows/release.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/mateof/tfm-android-tv-app/release.yml?branch=main&amp;label=CI&amp;logo=github"></a>
+  <a href="https://github.com/mateof/tfm-android-tv-app/releases/latest"><img alt="Version" src="https://img.shields.io/github/v/release/mateof/tfm-android-tv-app?label=version&amp;color=blue"></a>
+  <a href="https://github.com/mateof/tfm-android-tv-app/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/mateof/tfm-android-tv-app/total?label=downloads&amp;color=success"></a>
+  <a href="https://developer.android.com/tv"><img alt="Android TV" src="https://img.shields.io/badge/platform-Android%20TV-3DDC84?logo=android&amp;logoColor=white"></a>
+  <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Compose-7F52FF?logo=kotlin&amp;logoColor=white"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/mateof/tfm-android-tv-app"></a>
+  <a href="https://github.com/mateof/tfm-android-tv-app/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/mateof/tfm-android-tv-app"></a>
+</p>
+
 Android TV / Fire TV client for Telegram File Manager. Browse your channels on the big
 screen and play the videos stored in them.
 
