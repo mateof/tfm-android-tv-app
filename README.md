@@ -19,6 +19,10 @@ screen and play the videos stored in them.
 - **Folder navigation** inside each channel, showing only videos.
 - **All videos** view: every video in the channel, newest first.
 - **Messages** view: channel messages that carry a video, newest first, with previews.
+- **Library**: movies and series identified by the server (TMDB / OMDb) with posters,
+  synopsis, seasons and episodes; *continue watching*, *next up*, watched marks and a
+  screen to fix a wrong identification. Playback progress is stored on the server, so the
+  built-in player resumes where you left off.
 - **Playback choice**: built-in player (ExoPlayer + FFmpeg software decoders via NextLib),
   VLC or any other installed player, the system default, or ask every time.
 - **In-app updates**: settings can check GitHub Releases, download the APK and hand it to

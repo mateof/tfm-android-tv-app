@@ -8,6 +8,20 @@ import com.mateof.tfmtv.data.model.ChannelFoldersDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
 import com.mateof.tfmtv.data.model.FolderContentsDto
 import com.mateof.tfmtv.data.model.SystemInfoDto
+import com.mateof.tfmtv.data.model.IdentifyItemRequest
+import com.mateof.tfmtv.data.model.ItemWatchedRequest
+import com.mateof.tfmtv.data.model.LibraryFileDto
+import com.mateof.tfmtv.data.model.LibraryItemDetailDto
+import com.mateof.tfmtv.data.model.LibraryItemDto
+import com.mateof.tfmtv.data.model.LibraryStatsDto
+import com.mateof.tfmtv.data.model.MatchFileRequest
+import com.mateof.tfmtv.data.model.ProviderCandidateDto
+import com.mateof.tfmtv.data.model.WatchStateDto
+import com.mateof.tfmtv.data.model.WatchUpdateRequest
+import retrofit2.http.Body
+import retrofit2.http.DELETE
+import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -81,4 +95,76 @@ interface FilesApi {
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 100
     ): ApiEnvelope<List<ApiFileDto>>
+}
+
+interface LibraryApi {
+
+    @GET("api/v1/library/stats")
+    suspend fun stats(): ApiEnvelope<LibraryStatsDto>
+
+    @GET("api/v1/library/items")
+    suspend fun items(
+        @Query("kind") kind: String? = null,
+        @Query("search") search: String? = null,
+        @Query("status") status: String? = null,
+        @Query("sortBy") sortBy: String? = "title",
+        @Query("sortDescending") sortDescending: Boolean = false,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 500
+    ): ApiEnvelope<List<LibraryItemDto>>
+
+    @GET("api/v1/library/items/{id}")
+    suspend fun item(@Path("id") id: String): ApiEnvelope<LibraryItemDetailDto>
+
+    @GET("api/v1/library/continue")
+    suspend fun continueWatching(@Query("limit") limit: Int = 100): ApiEnvelope<List<LibraryFileDto>>
+
+    @GET("api/v1/library/files")
+    suspend fun files(
+        @Query("status") status: String? = null,
+        @Query("channelId") channelId: Long? = null,
+        @Query("search") search: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 500
+    ): ApiEnvelope<List<LibraryFileDto>>
+
+    @GET("api/v1/library/providers/search")
+    suspend fun searchProviders(
+        @Query("q") q: String? = null,
+        @Query("kind") kind: String? = null,
+        @Query("year") year: Int? = null,
+        @Query("imdbId") imdbId: String? = null
+    ): ApiEnvelope<List<ProviderCandidateDto>>
+
+    @PUT("api/v1/library/files/{channelId}/{fileId}/match")
+    suspend fun matchFile(
+        @Path("channelId") channelId: Long,
+        @Path("fileId") fileId: String,
+        @Body body: MatchFileRequest
+    ): ApiEnvelope<LibraryFileDto>
+
+    @POST("api/v1/library/files/{channelId}/{fileId}/ignore")
+    suspend fun ignoreFile(
+        @Path("channelId") channelId: Long,
+        @Path("fileId") fileId: String
+    ): ApiEnvelope<LibraryFileDto>
+
+    @PUT("api/v1/library/items/{id}/identify")
+    suspend fun identifyItem(@Path("id") id: String, @Body body: IdentifyItemRequest): ApiEnvelope<LibraryItemDetailDto>
+
+    @POST("api/v1/library/items/{id}/watched")
+    suspend fun markItemWatched(@Path("id") id: String, @Body body: ItemWatchedRequest): ApiEnvelope<LibraryItemDetailDto>
+
+    @DELETE("api/v1/library/items/{id}/watched")
+    suspend fun markItemUnwatched(@Path("id") id: String): ApiEnvelope<LibraryItemDetailDto>
+
+    @GET("api/v1/library/watch/{channelId}/{fileId}")
+    suspend fun watch(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<WatchStateDto>
+
+    @PUT("api/v1/library/watch/{channelId}/{fileId}")
+    suspend fun updateWatch(
+        @Path("channelId") channelId: Long,
+        @Path("fileId") fileId: String,
+        @Body body: WatchUpdateRequest
+    ): ApiEnvelope<WatchStateDto>
 }

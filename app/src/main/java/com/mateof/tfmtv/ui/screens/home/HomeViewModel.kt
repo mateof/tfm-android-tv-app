@@ -22,6 +22,7 @@ enum class HomeSection(val label: String) {
     FAVORITES("Favoritos"),
     FOLDERS("Carpetas"),
     ALL("Todos"),
+    LIBRARY("Biblioteca"),
     SETTINGS("Ajustes")
 }
 
@@ -54,7 +55,7 @@ data class HomeState(
                 HomeSection.ALL -> listed
                 HomeSection.FOLDERS ->
                     folders.firstOrNull { it.id == openFolderId }?.channels?.visible().orEmpty()
-                HomeSection.SETTINGS -> emptyList()
+                HomeSection.LIBRARY, HomeSection.SETTINGS -> emptyList()
             }
             val query = search.trim()
             return if (query.isBlank()) list

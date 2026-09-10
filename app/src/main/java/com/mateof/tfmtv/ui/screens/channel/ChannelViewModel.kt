@@ -6,9 +6,9 @@ import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.BreadcrumbDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
-import com.mateof.tfmtv.data.repo.MediaUrls
 import com.mateof.tfmtv.data.repo.VideoRepository
-import com.mateof.tfmtv.media.VideoPlayers
+import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.media.PlayLauncher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -77,17 +77,10 @@ data class ChannelState(
         }
 }
 
-sealed interface PlayEvent {
-    data class Internal(val url: String, val title: String) : PlayEvent
-    data object Handed : PlayEvent
-    data class Failed(val message: String) : PlayEvent
-}
-
 @HiltViewModel
 class ChannelViewModel @Inject constructor(
     private val repo: VideoRepository,
-    private val mediaUrls: MediaUrls,
-    private val players: VideoPlayers
+    private val launcher: PlayLauncher
 ) : ViewModel() {
 
     private var channelId: Long = 0
@@ -200,14 +193,11 @@ class ChannelViewModel @Inject constructor(
         }
     }
 
+    /** Resumes from the server-side position when the internal player is used. */
     fun play(file: ApiFileDto) {
-        val url = mediaUrls.withKey(file.streamUrl ?: file.downloadUrl)
-        if (url == null) {
-            emit(PlayEvent.Failed("Este vídeo no tiene URL de reproducción"))
-            return
+        viewModelScope.launch {
+            _events.send(launcher.resolve(file, channelId, file.name, startMs = null))
         }
-        if (players.launchExternal(url, file.name)) emit(PlayEvent.Handed)
-        else emit(PlayEvent.Internal(url, file.name))
     }
 
     /** Messages only carry a name, so the indexed file has to be looked up first. */

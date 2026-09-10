@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.mateof.tfmtv.ui.components.ChannelCard
@@ -38,12 +39,18 @@ import com.mateof.tfmtv.ui.components.Loading
 import com.mateof.tfmtv.ui.components.NavRail
 import com.mateof.tfmtv.ui.components.RailItem
 import com.mateof.tfmtv.ui.components.SearchField
+import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.ui.screens.library.IdentifyTarget
+import com.mateof.tfmtv.ui.screens.library.LibraryContent
 import com.mateof.tfmtv.ui.screens.settings.SettingsContent
 
 @Composable
 fun HomeScreen(
     onChannel: (Long, String) -> Unit,
-    onReconfigure: () -> Unit
+    onReconfigure: () -> Unit,
+    onLibraryItem: (String) -> Unit,
+    onIdentify: (IdentifyTarget) -> Unit,
+    onPlayInternal: (PlayEvent.Internal) -> Unit
 ) {
     val vm: HomeViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
@@ -66,6 +73,13 @@ fun HomeScreen(
             when {
                 state.section == HomeSection.SETTINGS ->
                     SettingsContent(onReconfigure = onReconfigure)
+
+                state.section == HomeSection.LIBRARY ->
+                    LibraryContent(
+                        onOpenItem = onLibraryItem,
+                        onIdentify = onIdentify,
+                        onPlayInternal = onPlayInternal
+                    )
 
                 state.loading -> Loading()
 
@@ -177,5 +191,6 @@ private fun HomeSection.icon() = when (this) {
     HomeSection.FAVORITES -> Icons.Outlined.Star
     HomeSection.FOLDERS -> Icons.Outlined.Folder
     HomeSection.ALL -> Icons.Outlined.Apps
+    HomeSection.LIBRARY -> Icons.Outlined.VideoLibrary
     HomeSection.SETTINGS -> Icons.Outlined.Settings
 }
