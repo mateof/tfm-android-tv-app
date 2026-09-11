@@ -66,6 +66,9 @@ fun LibraryFileDto.displayTitle(): String {
     } else item.title
 }
 
+/** Where a tab was left: what was on screen and which card the user left through. */
+data class TabPosition(val index: Int = 0, val offset: Int = 0, val key: String? = null)
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: LibraryRepository,
@@ -78,6 +81,22 @@ class LibraryViewModel @Inject constructor(
     private val _events = Channel<PlayEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
+    // Scroll and focus per tab. The ViewModel outlives the screen while Home is
+    // on the back stack, so opening a detail and coming back lands on the same
+    // place instead of at the top of the grid.
+    private val positions = mutableMapOf<LibraryTab, TabPosition>()
+
+    fun position(tab: LibraryTab): TabPosition = positions[tab] ?: TabPosition()
+
+    fun saveScroll(tab: LibraryTab, index: Int, offset: Int) {
+        positions[tab] = position(tab).copy(index = index, offset = offset)
+    }
+
+    /** The card the user opened; focus returns to it. */
+    fun saveFocus(tab: LibraryTab, key: String) {
+        positions[tab] = position(tab).copy(key = key)
+    }
+
     fun selectTab(tab: LibraryTab) {
         _state.update { it.copy(tab = tab, error = null, unavailable = null) }
         if (tab !in _state.value.loaded) load(tab)
@@ -85,11 +104,16 @@ class LibraryViewModel @Inject constructor(
 
     fun setSearch(value: String) = _state.update { it.copy(search = value) }
 
-    /** Reloads the visible tab, e.g. after playing or fixing something elsewhere. */
-    fun refresh() = load(_state.value.tab)
+    /**
+     * Reloads the visible tab, e.g. after playing or fixing something elsewhere.
+     * Keeps the current list on screen: swapping it for a spinner would drop the
+     * grid, and with it the scroll position the user expects to come back to.
+     */
+    fun refresh() = load(_state.value.tab, keepContent = true)
 
-    fun load(tab: LibraryTab = _state.value.tab) {
-        _state.update { it.copy(loading = true, error = null, unavailable = null) }
+    fun load(tab: LibraryTab = _state.value.tab, keepContent: Boolean = false) {
+        val spinner = !keepContent || tab !in _state.value.loaded
+        _state.update { it.copy(loading = spinner, error = null, unavailable = null) }
         viewModelScope.launch {
             runCatching {
                 when (tab) {
