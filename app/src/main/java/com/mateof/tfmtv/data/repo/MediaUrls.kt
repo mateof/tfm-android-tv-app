@@ -12,11 +12,21 @@ import javax.inject.Singleton
 @Singleton
 class MediaUrls @Inject constructor(private val prefs: ServerPreferences) {
 
+    /**
+     * Rebuilds the URL on the server the user configured. The API returns
+     * absolute URLs built from the host it sees, which behind a reverse proxy
+     * is its internal address and certificate: playing those from outside the
+     * LAN fails (the API calls themselves don't, because the OkHttp
+     * interceptor already rewrites their host). Only the path is kept.
+     */
     fun absolute(url: String?): String? {
         if (url.isNullOrBlank()) return null
         val base = prefs.current.normalizedBaseUrl
-        return if (url.startsWith("http://") || url.startsWith("https://")) url
-        else base + (if (url.startsWith("/")) url else "/$url")
+        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true))
+            return base + (if (url.startsWith("/")) url else "/$url")
+        val afterScheme = url.indexOf("//") + 2
+        val pathStart = url.indexOf('/', afterScheme)
+        return if (pathStart < 0) base else base + url.substring(pathStart)
     }
 
     /** Absolute URL with the API key appended as query parameter. */

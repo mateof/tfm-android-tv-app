@@ -77,6 +77,7 @@ class PlayerViewModel @Inject constructor(
     private var fileId = ""
     private var ticker: Job? = null
     private var ended = false
+    private var warnedAboutSaving = false
 
     private val tracksProgress get() = channelId != 0L && fileId.isNotBlank()
 
@@ -166,17 +167,33 @@ class PlayerViewModel @Inject constructor(
         ticker = null
     }
 
-    /** Reads the position on the main thread (ExoPlayer requirement) and ships it. */
+    /**
+     * Reads the position on the main thread (ExoPlayer requirement) and ships
+     * it. A duration of 0 means "not known yet": the server keeps the one it
+     * already had, and the file still shows up in "continue watching", which
+     * an early return would have silently prevented. Position 0 is not worth
+     * reporting and would wipe a good one when the player is being released.
+     */
     private fun snapshot(): Pair<Long, Long>? {
         if (!tracksProgress) return null
+        val position = player.currentPosition
+        if (position <= 0) return null
         val duration = player.duration
-        if (duration == C.TIME_UNSET || duration <= 0) return null
-        return player.currentPosition to duration
+        return position to (if (duration == C.TIME_UNSET || duration <= 0) 0L else duration)
     }
 
     private fun save(completed: Boolean? = null) {
         val (position, duration) = snapshot() ?: return
-        viewModelScope.launch { watch.save(channelId, fileId, position, duration, completed) }
+        viewModelScope.launch {
+            val saved = watch.save(channelId, fileId, position, duration, completed)
+            // Say it once: a silent failure here is why progress can go missing
+            if (!saved && !warnedAboutSaving) {
+                warnedAboutSaving = true
+                _notice.value = "No se pudo guardar el progreso en el servidor"
+                delay(5_000)
+                _notice.value = null
+            }
+        }
     }
 
     override fun onCleared() {

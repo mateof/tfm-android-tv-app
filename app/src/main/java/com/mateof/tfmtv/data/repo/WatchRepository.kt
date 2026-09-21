@@ -30,15 +30,16 @@ class WatchRepository @Inject constructor(
         return if (!state.completed && state.positionMs > RESUME_MIN_MS) state.positionMs else 0
     }
 
-    suspend fun save(channelId: Long, fileId: String, positionMs: Long, durationMs: Long, completed: Boolean? = null) {
+    /** False when the server did not take it, so the player can say so once. */
+    suspend fun save(channelId: Long, fileId: String, positionMs: Long, durationMs: Long, completed: Boolean? = null): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
                 apiCallNullable {
                     api.updateWatch(channelId, fileId, WatchUpdateRequest(positionMs, durationMs, completed))
                 }
             }.onFailure { Log.w(TAG, "Could not save progress of $channelId/$fileId: ${it.message}") }
+                .isSuccess
         }
-    }
 
     companion object {
         private const val TAG = "WatchRepository"
