@@ -1,5 +1,6 @@
 package com.mateof.tfmtv.ui.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -16,7 +17,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 
 @Composable
@@ -26,17 +26,19 @@ fun SearchField(
     label: String,
     modifier: Modifier = Modifier
 ) {
-    val focusManager = LocalFocusManager.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-        modifier = modifier.dpadEscape(focusManager)
-    )
+    ClickToEdit(modifier) { fieldModifier, done ->
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { done() }),
+            colors = clickToEditColors(),
+            modifier = fieldModifier.fillMaxWidth()
+        )
+    }
 }
 
 /** A focused text field eats the D-pad up/down keys, so focus has to be moved by hand. */

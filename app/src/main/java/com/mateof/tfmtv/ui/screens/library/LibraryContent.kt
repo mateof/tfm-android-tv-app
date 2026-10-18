@@ -45,6 +45,9 @@ import com.mateof.tfmtv.data.model.LibraryFileStatus
 import com.mateof.tfmtv.data.model.LibraryItemDto
 import com.mateof.tfmtv.data.model.LibraryKind
 import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.ui.cast.CastSheet
+import com.mateof.tfmtv.ui.cast.CastTarget
+import com.mateof.tfmtv.ui.cast.CastViewModel
 import com.mateof.tfmtv.ui.components.EmptyState
 import com.mateof.tfmtv.ui.components.ErrorState
 import com.mateof.tfmtv.ui.components.Loading
@@ -70,9 +73,11 @@ data class IdentifyTarget(
 fun LibraryContent(
     onOpenItem: (String) -> Unit,
     onIdentify: (IdentifyTarget) -> Unit,
-    onPlayInternal: (PlayEvent.Internal) -> Unit
+    onPlayInternal: (PlayEvent.Internal) -> Unit,
+    onOpenCastPanel: () -> Unit
 ) {
     val vm: LibraryViewModel = hiltViewModel()
+    val castVm: CastViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf<String?>(null) }
 
@@ -109,13 +114,28 @@ fun LibraryContent(
             Text(
                 text = "Biblioteca",
                 style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
+            )
+            TabChip(
+                label = if (state.scanning) "Escaneando…" else "Reescanear biblioteca",
+                selected = state.scanning,
+                onClick = vm::scan
             )
             SearchField(
                 value = state.search,
                 onValueChange = vm::setSearch,
                 label = "Buscar título",
                 modifier = Modifier.width(360.dp)
+            )
+        }
+        state.scanMessage?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 40.dp, bottom = 8.dp)
             )
         }
 
@@ -157,6 +177,10 @@ fun LibraryContent(
                         onPlay = { file ->
                             vm.saveFocus(tab, fileKey(file))
                             vm.play(file)
+                        },
+                        onCast = { file ->
+                            val start = file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L
+                            castVm.open(CastTarget(file.file, file.channelId, file.displayTitle(), start))
                         }
                     )
 
@@ -186,6 +210,8 @@ fun LibraryContent(
             }
         }
     }
+
+    CastSheet(castVm, onOpenPanel = onOpenCastPanel)
 }
 
 private fun fileKey(file: LibraryFileDto) = "${file.channelId}-${file.fileId}"
@@ -249,7 +275,8 @@ private fun ContinueGrid(
     search: String,
     position: TabPosition,
     onScroll: (Int, Int) -> Unit,
-    onPlay: (LibraryFileDto) -> Unit
+    onPlay: (LibraryFileDto) -> Unit,
+    onCast: (LibraryFileDto) -> Unit
 ) {
     if (files.isEmpty()) {
         EmptyState(
@@ -285,6 +312,7 @@ private fun ContinueGrid(
                 completed = file.watch?.completed == true,
                 placeholder = if (item?.kind == LibraryKind.SERIES) Icons.Outlined.Tv else Icons.Outlined.Movie,
                 onClick = { onPlay(file) },
+                onLongClick = { onCast(file) },
                 modifier = if (isTarget) Modifier.focusRequester(focus.requester) else Modifier
             )
             focus.RequestOnce(isTarget)

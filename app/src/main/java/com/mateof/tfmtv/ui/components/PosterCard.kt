@@ -44,11 +44,13 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     progress: Float? = null,
     completed: Boolean = false,
-    placeholder: ImageVector = Icons.Outlined.Movie
+    placeholder: ImageVector = Icons.Outlined.Movie,
+    onLongClick: (() -> Unit)? = null
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.tapClick(onClick),
+        onLongClick = onLongClick,
+        modifier = modifier.tapClick(onClick, onLongClick),
         scale = CardDefaults.scale(focusedScale = 1.06f)
     ) {
         Column {

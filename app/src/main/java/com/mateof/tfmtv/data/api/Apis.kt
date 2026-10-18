@@ -4,6 +4,8 @@ import com.mateof.tfmtv.core.ApiEnvelope
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.AuthStatusDto
 import com.mateof.tfmtv.data.model.ChannelDto
+import com.mateof.tfmtv.data.model.ChannelRefreshRequest
+import com.mateof.tfmtv.data.model.ChannelRefreshResultDto
 import com.mateof.tfmtv.data.model.ChannelFoldersDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
 import com.mateof.tfmtv.data.model.FolderContentsDto
@@ -13,11 +15,14 @@ import com.mateof.tfmtv.data.model.ItemWatchedRequest
 import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryItemDetailDto
 import com.mateof.tfmtv.data.model.LibraryItemDto
+import com.mateof.tfmtv.data.model.LibraryScanRequest
+import com.mateof.tfmtv.data.model.LibraryScanStateDto
 import com.mateof.tfmtv.data.model.LibraryStatsDto
 import com.mateof.tfmtv.data.model.MatchFileRequest
 import com.mateof.tfmtv.data.model.ProviderCandidateDto
 import com.mateof.tfmtv.data.model.WatchStateDto
 import com.mateof.tfmtv.data.model.WatchUpdateRequest
+import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.POST
@@ -66,6 +71,17 @@ interface ChannelsApi {
         @Query("offset") offset: Int = 0,
         @Query("onlyMedia") onlyMedia: Boolean = true
     ): ApiEnvelope<List<ChannelMessageDto>>
+
+    /** Starts indexing the files posted since the last scan; answers 409 if one is running. */
+    @POST("api/v1/channels/{id}/refresh")
+    suspend fun refresh(@Path("id") id: String, @Body body: ChannelRefreshRequest): ApiEnvelope<JsonElement>
+
+    @GET("api/v1/channels/{id}/refresh")
+    suspend fun refreshRunning(@Path("id") id: String): ApiEnvelope<Boolean>
+
+    /** `data: null` until a refresh has finished since the server started. */
+    @GET("api/v1/channels/{id}/refresh/result")
+    suspend fun refreshResult(@Path("id") id: String): ApiEnvelope<ChannelRefreshResultDto>
 }
 
 interface FilesApi {
@@ -112,6 +128,12 @@ interface LibraryApi {
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 500
     ): ApiEnvelope<List<LibraryItemDto>>
+
+    @POST("api/v1/library/scan")
+    suspend fun scan(@Body body: LibraryScanRequest): ApiEnvelope<JsonElement>
+
+    @GET("api/v1/library/scan")
+    suspend fun scanState(): ApiEnvelope<LibraryScanStateDto>
 
     @GET("api/v1/library/items/{id}")
     suspend fun item(@Path("id") id: String): ApiEnvelope<LibraryItemDetailDto>

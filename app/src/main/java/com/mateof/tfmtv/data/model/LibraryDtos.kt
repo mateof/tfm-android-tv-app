@@ -250,3 +250,6 @@ data class IdentifyItemRequest(
 
 @Serializable
 data class ItemWatchedRequest(val season: Int? = null)
+
+@Serializable
+data class LibraryScanRequest(val channelId: String? = null, val force: Boolean = false)

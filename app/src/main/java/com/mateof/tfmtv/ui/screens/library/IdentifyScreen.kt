@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Movie
@@ -30,7 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,8 @@ import com.mateof.tfmtv.ui.components.Loading
 import com.mateof.tfmtv.ui.components.PosterImage
 import com.mateof.tfmtv.ui.components.SearchField
 import com.mateof.tfmtv.ui.components.TabChip
-import com.mateof.tfmtv.ui.components.dpadEscape
+import com.mateof.tfmtv.ui.components.ClickToEdit
+import com.mateof.tfmtv.ui.components.clickToEditColors
 import com.mateof.tfmtv.ui.components.rememberMediaUrls
 import com.mateof.tfmtv.ui.components.tapClick
 import com.mateof.tfmtv.ui.theme.Background
@@ -59,7 +61,6 @@ import kotlinx.coroutines.delay
 fun IdentifyScreen(target: IdentifyTarget, onDone: () -> Unit) {
     val vm: IdentifyViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
-    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(target) { vm.start(target) }
     LaunchedEffect(Unit) { vm.done.collect { onDone() } }
@@ -107,22 +108,30 @@ fun IdentifyScreen(target: IdentifyTarget, onDone: () -> Unit) {
             )
             TabChip("Serie", selected = state.kind == LibraryKind.SERIES, onClick = { vm.setKind(LibraryKind.SERIES) })
             if (state.needsEpisode) {
-                OutlinedTextField(
-                    value = state.season,
-                    onValueChange = vm::setSeason,
-                    label = { androidx.compose.material3.Text("Temporada") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(130.dp).dpadEscape(focusManager)
-                )
-                OutlinedTextField(
-                    value = state.episode,
-                    onValueChange = vm::setEpisode,
-                    label = { androidx.compose.material3.Text("Episodio") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(130.dp).dpadEscape(focusManager)
-                )
+                ClickToEdit(Modifier.width(130.dp)) { fieldModifier, done ->
+                    OutlinedTextField(
+                        value = state.season,
+                        onValueChange = vm::setSeason,
+                        label = { androidx.compose.material3.Text("Temporada") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { done() }),
+                        colors = clickToEditColors(),
+                        modifier = fieldModifier.fillMaxWidth()
+                    )
+                }
+                ClickToEdit(Modifier.width(130.dp)) { fieldModifier, done ->
+                    OutlinedTextField(
+                        value = state.episode,
+                        onValueChange = vm::setEpisode,
+                        label = { androidx.compose.material3.Text("Episodio") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { done() }),
+                        colors = clickToEditColors(),
+                        modifier = fieldModifier.fillMaxWidth()
+                    )
+                }
             }
         }
 

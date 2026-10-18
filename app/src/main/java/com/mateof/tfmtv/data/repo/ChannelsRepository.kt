@@ -1,10 +1,14 @@
 package com.mateof.tfmtv.data.repo
 
+import com.mateof.tfmtv.core.ApiException
 import com.mateof.tfmtv.core.apiCall
+import com.mateof.tfmtv.core.apiCallNullable
 import com.mateof.tfmtv.core.apiCallPaged
 import com.mateof.tfmtv.data.api.ChannelsApi
 import com.mateof.tfmtv.data.model.ChannelDto
 import com.mateof.tfmtv.data.model.ChannelFoldersDto
+import com.mateof.tfmtv.data.model.ChannelRefreshRequest
+import com.mateof.tfmtv.data.model.ChannelRefreshResultDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -46,7 +50,29 @@ class ChannelsRepository @Inject constructor(
         apiCall { api.details(id.toString()) }
     }
 
+    /**
+     * Asks the server to index what was posted since the last scan. Returns false
+     * when a scan of that channel was already running: the caller waits for it all the same.
+     */
+    suspend fun startRefresh(id: Long): Boolean = withContext(Dispatchers.IO) {
+        try {
+            apiCallNullable { api.refresh(id.toString(), ChannelRefreshRequest()) }
+            true
+        } catch (e: ApiException) {
+            if (e.code == ALREADY_RUNNING) false else throw e
+        }
+    }
+
+    suspend fun refreshRunning(id: Long): Boolean = withContext(Dispatchers.IO) {
+        apiCall { api.refreshRunning(id.toString()) }
+    }
+
+    suspend fun refreshResult(id: Long): ChannelRefreshResultDto? = withContext(Dispatchers.IO) {
+        apiCallNullable { api.refreshResult(id.toString()) }
+    }
+
     private companion object {
+        const val ALREADY_RUNNING = "already_running"
         const val PAGE_SIZE = 500
         const val MAX_PAGES = 20
     }

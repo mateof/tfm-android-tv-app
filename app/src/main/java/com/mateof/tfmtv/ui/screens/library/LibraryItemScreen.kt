@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -61,6 +62,9 @@ import com.mateof.tfmtv.data.model.LibraryEpisodeDto
 import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryItemDetailDto
 import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.ui.cast.CastSheet
+import com.mateof.tfmtv.ui.cast.CastTarget
+import com.mateof.tfmtv.ui.cast.CastViewModel
 import com.mateof.tfmtv.ui.components.ErrorState
 import com.mateof.tfmtv.ui.components.Loading
 import com.mateof.tfmtv.ui.components.PosterImage
@@ -76,9 +80,11 @@ fun LibraryItemScreen(
     itemId: String,
     onIdentify: (IdentifyTarget) -> Unit,
     onPlayInternal: (PlayEvent.Internal) -> Unit,
+    onOpenCastPanel: () -> Unit,
     onBack: () -> Unit
 ) {
     val vm: LibraryItemViewModel = hiltViewModel()
+    val castVm: CastViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf<String?>(null) }
 
@@ -137,6 +143,9 @@ fun LibraryItemScreen(
                     item = item,
                     vm = vm,
                     playFocus = playFocus,
+                    onCast = { file, start ->
+                        castVm.open(CastTarget(file.file, file.channelId, vm.titleFor(file), start))
+                    },
                     onIdentify = {
                         onIdentify(IdentifyTarget(itemId = item.id, kind = item.kind, query = item.title))
                     }
@@ -187,6 +196,8 @@ fun LibraryItemScreen(
             }
         }
     }
+
+    CastSheet(castVm, onOpenPanel = onOpenCastPanel)
 }
 
 @Composable
@@ -253,6 +264,7 @@ private fun ActionRow(
     item: LibraryItemDetailDto,
     vm: LibraryItemViewModel,
     playFocus: FocusRequester,
+    onCast: (LibraryFileDto, Long) -> Unit,
     onIdentify: () -> Unit
 ) {
     val primary = vm.primaryFile()
@@ -272,6 +284,9 @@ private fun ActionRow(
             modifier = Modifier.focusRequester(playFocus))
         ActionButton("Ver desde el principio", Icons.Outlined.Replay, enabled = primary != null) {
             primary?.let { (file, _) -> vm.play(file, 0L) }
+        }
+        ActionButton("Enviar a la tele", Icons.Outlined.Cast, enabled = primary != null) {
+            primary?.let { (file, start) -> onCast(file, start) }
         }
         val watched = item.watch.completed
         ActionButton(

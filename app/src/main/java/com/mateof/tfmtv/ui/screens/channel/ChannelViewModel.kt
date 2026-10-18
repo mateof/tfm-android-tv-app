@@ -6,12 +6,14 @@ import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.BreadcrumbDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
+import com.mateof.tfmtv.data.repo.ChannelsRepository
 import com.mateof.tfmtv.data.repo.VideoRepository
 import com.mateof.tfmtv.media.PlayEvent
 import com.mateof.tfmtv.media.PlayLauncher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +60,8 @@ data class ChannelState(
     val messages: List<ChannelMessageDto> = emptyList(),
     val filesByMessage: Map<Long, ApiFileDto> = emptyMap(),
     val resolving: Boolean = false,
+    val rescanning: Boolean = false,
+    val rescanMessage: String? = null,
     val sorts: Map<ChannelTab, SortOption> = defaultSorts
 ) {
     val canGoUp: Boolean get() = parentFolderId != null || parentPath != null
@@ -80,6 +84,7 @@ data class ChannelState(
 @HiltViewModel
 class ChannelViewModel @Inject constructor(
     private val repo: VideoRepository,
+    private val channels: ChannelsRepository,
     private val launcher: PlayLauncher
 ) : ViewModel() {
 
@@ -193,6 +198,61 @@ class ChannelViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Asks the server to index what was posted since the last scan, waits for it
+     * and reloads. The scan runs on the server, so leaving the screen does not stop it.
+     */
+    fun rescan() {
+        if (_state.value.rescanning) return
+        val id = channelId
+        _state.update { it.copy(rescanning = true, rescanMessage = "Buscando ficheros nuevos en Telegram…") }
+        viewModelScope.launch {
+            val outcome = runCatching {
+                val started = channels.startRefresh(id)
+                if (!started) {
+                    _state.update { it.copy(rescanMessage = "Ya había un escaneo en marcha; esperando a que termine…") }
+                }
+                var waited = 0L
+                do {
+                    delay(RESCAN_POLL_MS)
+                    waited += RESCAN_POLL_MS
+                } while (channels.refreshRunning(id) && waited < RESCAN_MAX_WAIT_MS)
+                if (waited >= RESCAN_MAX_WAIT_MS) null else channels.refreshResult(id)
+            }
+            if (id != channelId) return@launch
+            val text = outcome.fold(
+                onSuccess = { result ->
+                    when {
+                        result == null -> "El escaneo sigue en el servidor. Vuelve a cargar dentro de un rato."
+                        result.failed -> "El escaneo falló a mitad; se añadieron ${result.total} ficheros."
+                        result.total == 0 -> "No hay ficheros nuevos."
+                        else -> "${plural(result.total, "fichero nuevo", "ficheros nuevos")} (${plural(result.videos, "vídeo", "vídeos")})."
+                    }
+                },
+                onFailure = { e -> "No se pudo escanear: ${e.userMessage()}" }
+            )
+            _state.update {
+                it.copy(
+                    rescanning = false,
+                    rescanMessage = text,
+                    allVideos = emptyList(),
+                    messages = emptyList(),
+                    filesByMessage = emptyMap()
+                )
+            }
+            if (outcome.isSuccess) reloadCurrentTab()
+        }
+    }
+
+    private fun reloadCurrentTab() {
+        val state = _state.value
+        when (state.tab) {
+            ChannelTab.FOLDERS -> openFolder(folderId = state.folderId, path = state.path)
+            ChannelTab.VIDEOS -> loadAllVideos()
+            ChannelTab.MESSAGES -> loadMessages()
+        }
+    }
+
     /** Resumes from the server-side position when the internal player is used. */
     fun play(file: ApiFileDto) {
         viewModelScope.launch {
@@ -224,5 +284,12 @@ class ChannelViewModel @Inject constructor(
 
     private fun fail(e: Throwable) {
         _state.update { it.copy(loading = false, error = e.userMessage()) }
+    }
+
+    private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
+
+    private companion object {
+        const val RESCAN_POLL_MS = 3_000L
+        const val RESCAN_MAX_WAIT_MS = 10 * 60_000L
     }
 }

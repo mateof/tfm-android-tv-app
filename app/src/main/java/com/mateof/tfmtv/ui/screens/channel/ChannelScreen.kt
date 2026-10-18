@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,6 +30,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.mateof.tfmtv.core.Format
 import com.mateof.tfmtv.data.model.ApiFileDto
+import com.mateof.tfmtv.data.model.ChannelMessageDto
+import com.mateof.tfmtv.ui.cast.CastSheet
+import com.mateof.tfmtv.ui.cast.CastTarget
+import com.mateof.tfmtv.ui.cast.CastViewModel
 import com.mateof.tfmtv.ui.components.EmptyState
 import com.mateof.tfmtv.ui.components.ErrorState
 import com.mateof.tfmtv.ui.components.FolderCard
@@ -43,11 +48,14 @@ fun ChannelScreen(
     channelId: Long,
     channelName: String,
     onPlayInternal: (PlayEvent.Internal) -> Unit,
+    onOpenCastPanel: () -> Unit,
     onBack: () -> Unit
 ) {
     val vm: ChannelViewModel = hiltViewModel()
+    val castVm: CastViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     var message by remember { mutableStateOf<String?>(null) }
+    val cast: (ApiFileDto) -> Unit = { file -> castVm.open(CastTarget(file, channelId, file.name)) }
 
     LaunchedEffect(channelId) { vm.start(channelId) }
 
@@ -64,11 +72,38 @@ fun ChannelScreen(
     BackHandler(enabled = state.tab == ChannelTab.FOLDERS && state.canGoUp) { vm.up() }
 
     Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 40.dp, end = 40.dp, top = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = channelName.ifBlank { "Canal" },
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            TabChip(
+                label = if (state.rescanning) "Escaneando…" else "Buscar ficheros nuevos",
+                selected = state.rescanning,
+                onClick = vm::rescan
+            )
+        }
         Text(
-            text = channelName.ifBlank { "Canal" },
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(start = 40.dp, top = 28.dp)
+            text = "Mantén pulsado un vídeo para enviarlo a la tele (DLNA).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 40.dp, top = 4.dp)
         )
+        state.rescanMessage?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 40.dp, top = 6.dp)
+            )
+        }
 
         Row(
             modifier = Modifier.padding(start = 40.dp, top = 14.dp, bottom = 8.dp),
@@ -130,21 +165,27 @@ fun ChannelScreen(
                 state.loading -> Loading()
                 state.error != null -> ErrorState(state.error!!, onRetry = { vm.selectTab(state.tab) })
                 else -> when (state.tab) {
-                    ChannelTab.FOLDERS -> FolderTab(state, vm)
+                    ChannelTab.FOLDERS -> FolderTab(state, vm, cast)
                     ChannelTab.VIDEOS -> VideoGrid(
                         videos = state.allVideos,
                         empty = "No hay vídeos indexados en este canal.",
-                        vm = vm
+                        vm = vm,
+                        onCast = cast
                     )
-                    ChannelTab.MESSAGES -> MessagesTab(state, vm)
+                    ChannelTab.MESSAGES -> MessagesTab(state, vm) { msg ->
+                        state.filesByMessage[msg.id]?.let(cast)
+                            ?: run { message = "El vídeo del mensaje no está indexado; ábrelo antes para localizarlo." }
+                    }
                 }
             }
         }
     }
+
+    CastSheet(castVm, onOpenPanel = onOpenCastPanel)
 }
 
 @Composable
-private fun FolderTab(state: ChannelState, vm: ChannelViewModel) {
+private fun FolderTab(state: ChannelState, vm: ChannelViewModel, onCast: (ApiFileDto) -> Unit) {
     if (state.folders.isEmpty() && state.videos.isEmpty()) {
         EmptyState("Esta carpeta no contiene vídeos.")
         return
@@ -166,14 +207,15 @@ private fun FolderTab(state: ChannelState, vm: ChannelViewModel) {
             VideoCard(
                 title = file.name,
                 subtitle = file.subtitle(),
-                onClick = { vm.play(file) }
+                onClick = { vm.play(file) },
+                onLongClick = { onCast(file) }
             )
         }
     }
 }
 
 @Composable
-private fun VideoGrid(videos: List<ApiFileDto>, empty: String, vm: ChannelViewModel) {
+private fun VideoGrid(videos: List<ApiFileDto>, empty: String, vm: ChannelViewModel, onCast: (ApiFileDto) -> Unit) {
     if (videos.isEmpty()) {
         EmptyState(empty)
         return
@@ -188,14 +230,15 @@ private fun VideoGrid(videos: List<ApiFileDto>, empty: String, vm: ChannelViewMo
             VideoCard(
                 title = file.name,
                 subtitle = file.subtitle(),
-                onClick = { vm.play(file) }
+                onClick = { vm.play(file) },
+                onLongClick = { onCast(file) }
             )
         }
     }
 }
 
 @Composable
-private fun MessagesTab(state: ChannelState, vm: ChannelViewModel) {
+private fun MessagesTab(state: ChannelState, vm: ChannelViewModel, onCast: (ChannelMessageDto) -> Unit) {
     if (state.messages.isEmpty()) {
         EmptyState("Este canal no tiene mensajes con vídeo.")
         return
@@ -215,7 +258,8 @@ private fun MessagesTab(state: ChannelState, vm: ChannelViewModel) {
                     Format.date(msg.date).takeIf { it.isNotBlank() },
                     Format.bytes(msg.fileSize).takeIf { it.isNotBlank() }
                 ).joinToString(" · "),
-                onClick = { vm.play(msg) }
+                onClick = { vm.play(msg) },
+                onLongClick = { onCast(msg) }
             )
         }
     }

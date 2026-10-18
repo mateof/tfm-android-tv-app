@@ -124,11 +124,13 @@ fun VideoCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.tapClick(onClick),
+        onLongClick = onLongClick,
+        modifier = modifier.tapClick(onClick, onLongClick),
         scale = CardDefaults.scale(focusedScale = 1.06f)
     ) {
         Column {

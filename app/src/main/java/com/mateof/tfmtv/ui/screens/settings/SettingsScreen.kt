@@ -30,6 +30,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.mateof.tfmtv.data.prefs.CastRouteMode
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.prefs.VideoPlayerChoice
 import com.mateof.tfmtv.media.VideoPlayers
@@ -59,6 +60,7 @@ data class SettingsState(
     val videoPlayer: String = VideoPlayerChoice.INTERNAL,
     val videoApps: List<VideoPlayers.PlayerApp> = emptyList(),
     val showHiddenChannels: Boolean = false,
+    val castRoute: CastRouteMode = CastRouteMode.AUTO,
     val appVersion: String = "",
     val update: UpdateState = UpdateState()
 )
@@ -76,6 +78,7 @@ class SettingsViewModel @Inject constructor(
             videoPlayer = prefs.videoPlayer.value,
             videoApps = players.installed(),
             showHiddenChannels = prefs.showHiddenChannels.value,
+            castRoute = prefs.castRoute.value,
             appVersion = updater.currentVersion
         )
     )
@@ -89,6 +92,9 @@ class SettingsViewModel @Inject constructor(
             prefs.configFlow.collect { c -> _state.update { it.copy(baseUrl = c.baseUrl) } }
         }
         viewModelScope.launch {
+            prefs.castRoute.collect { v -> _state.update { it.copy(castRoute = v) } }
+        }
+        viewModelScope.launch {
             prefs.showHiddenChannels.collect { v ->
                 _state.update { it.copy(showHiddenChannels = v) }
             }
@@ -96,6 +102,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setVideoPlayer(value: String) = viewModelScope.launch { prefs.saveVideoPlayer(value) }
+
+    fun setCastRoute(value: CastRouteMode) = viewModelScope.launch { prefs.saveCastRoute(value) }
 
     fun toggleHiddenChannels() = viewModelScope.launch {
         prefs.saveShowHiddenChannels(!_state.value.showHiddenChannels)
@@ -210,6 +218,24 @@ fun SettingsContent(onReconfigure: () -> Unit) {
                 label = "Mostrar canales ocultos",
                 selected = state.showHiddenChannels,
                 onClick = vm::toggleHiddenChannels
+            )
+        }
+        item {
+            SectionTitle("Envío a la tele (DLNA)")
+        }
+        item {
+            Text(
+                "Automático elige solo: directo si la tele llega al servidor, y a través de este aparato " +
+                    "si el servidor sólo es accesible desde aquí (por ejemplo, por una VPN).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        items(CastRouteMode.entries, key = { "cast-${it.name}" }) { mode ->
+            ChoiceRow(
+                label = mode.label,
+                selected = state.castRoute == mode,
+                onClick = { vm.setCastRoute(mode) }
             )
         }
         item {

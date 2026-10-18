@@ -23,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Cast
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
@@ -40,6 +41,7 @@ import com.mateof.tfmtv.ui.components.NavRail
 import com.mateof.tfmtv.ui.components.RailItem
 import com.mateof.tfmtv.ui.components.SearchField
 import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.ui.cast.CastPanelViewModel
 import com.mateof.tfmtv.ui.screens.library.IdentifyTarget
 import com.mateof.tfmtv.ui.screens.library.LibraryContent
 import com.mateof.tfmtv.ui.screens.settings.SettingsContent
@@ -50,10 +52,13 @@ fun HomeScreen(
     onReconfigure: () -> Unit,
     onLibraryItem: (String) -> Unit,
     onIdentify: (IdentifyTarget) -> Unit,
-    onPlayInternal: (PlayEvent.Internal) -> Unit
+    onPlayInternal: (PlayEvent.Internal) -> Unit,
+    onOpenCastPanel: () -> Unit
 ) {
     val vm: HomeViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
+    val castVm: CastPanelViewModel = hiltViewModel()
+    val casting by castVm.session.collectAsStateWithLifecycle()
     var railExpanded by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxSize()) {
@@ -67,6 +72,16 @@ fun HomeScreen(
                     onClick = { vm.select(section) }
                 )
             }
+            // Only while something is on a television: the way back to its remote.
+            casting?.let { session ->
+                RailItem(
+                    icon = Icons.Outlined.Cast,
+                    label = "En ${session.device.name}",
+                    selected = false,
+                    expanded = railExpanded,
+                    onClick = onOpenCastPanel
+                )
+            }
         }
 
         Box(Modifier.fillMaxSize()) {
@@ -78,7 +93,8 @@ fun HomeScreen(
                     LibraryContent(
                         onOpenItem = onLibraryItem,
                         onIdentify = onIdentify,
-                        onPlayInternal = onPlayInternal
+                        onPlayInternal = onPlayInternal,
+                        onOpenCastPanel = onOpenCastPanel
                     )
 
                 state.loading -> Loading()

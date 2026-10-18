@@ -25,3 +25,4 @@ setup-signing.ps1
 *.log
 hs_err_pid*
 replay_pid*
+tools/media/

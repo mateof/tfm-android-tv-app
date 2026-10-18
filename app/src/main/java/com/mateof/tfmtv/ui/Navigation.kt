@@ -2,15 +2,21 @@ package com.mateof.tfmtv.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mateof.tfmtv.cast.CastPanelRequests
 import com.mateof.tfmtv.data.model.LibraryKind
 import com.mateof.tfmtv.media.PlayEvent
+import com.mateof.tfmtv.ui.cast.CastPanelScreen
 import com.mateof.tfmtv.ui.screens.channel.ChannelScreen
 import com.mateof.tfmtv.ui.screens.gate.GateScreen
 import com.mateof.tfmtv.ui.screens.home.HomeScreen
@@ -27,6 +33,7 @@ object Routes {
     const val CHANNEL = "channel/{channelId}?name={name}"
     const val PLAYER = "player?url={url}&title={title}&channelId={channelId}&fileId={fileId}&startMs={startMs}"
     const val LIBRARY_ITEM = "library/item/{id}"
+    const val CAST = "cast"
     const val LIBRARY_IDENTIFY =
         "library/identify?channelId={channelId}&fileId={fileId}&itemId={itemId}&kind={kind}&q={q}&season={season}&episode={episode}"
 
@@ -53,6 +60,17 @@ fun TfmTvNavHost(modifier: Modifier = Modifier) {
     val nav: NavHostController = rememberNavController()
     val play: (PlayEvent.Internal) -> Unit = { nav.navigate(Routes.player(it)) }
     val identify: (IdentifyTarget) -> Unit = { nav.navigate(Routes.identify(it)) }
+    val openCast: () -> Unit = { nav.navigate(Routes.CAST) { launchSingleTop = true } }
+
+    // The send notification asks for the panel; it opens once the app is past setup.
+    val castRequested by CastPanelRequests.pending.collectAsState()
+    val entry by nav.currentBackStackEntryAsState()
+    LaunchedEffect(castRequested, entry?.destination?.route) {
+        val route = entry?.destination?.route ?: return@LaunchedEffect
+        if (!castRequested || route == Routes.GATE || route == Routes.SETUP) return@LaunchedEffect
+        CastPanelRequests.consume()
+        if (route != Routes.CAST) openCast()
+    }
 
     NavHost(navController = nav, startDestination = Routes.GATE, modifier = modifier) {
 
@@ -75,8 +93,13 @@ fun TfmTvNavHost(modifier: Modifier = Modifier) {
                 onReconfigure = { nav.navigate(Routes.SETUP) },
                 onLibraryItem = { nav.navigate(Routes.libraryItem(it)) },
                 onIdentify = identify,
-                onPlayInternal = play
+                onPlayInternal = play,
+                onOpenCastPanel = openCast
             )
+        }
+
+        composable(Routes.CAST) {
+            CastPanelScreen(onBack = { nav.popBackStack() })
         }
 
         composable(
@@ -90,6 +113,7 @@ fun TfmTvNavHost(modifier: Modifier = Modifier) {
                 channelId = entry.arguments?.getLong("channelId") ?: 0L,
                 channelName = entry.arguments?.getString("name").orEmpty(),
                 onPlayInternal = play,
+                onOpenCastPanel = openCast,
                 onBack = { nav.popBackStack() }
             )
         }
@@ -102,6 +126,7 @@ fun TfmTvNavHost(modifier: Modifier = Modifier) {
                 itemId = entry.arguments?.getString("id").orEmpty(),
                 onIdentify = identify,
                 onPlayInternal = play,
+                onOpenCastPanel = openCast,
                 onBack = { nav.popBackStack() }
             )
         }

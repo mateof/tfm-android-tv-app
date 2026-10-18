@@ -7,12 +7,14 @@ import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryFileStatus
 import com.mateof.tfmtv.data.model.LibraryItemDto
 import com.mateof.tfmtv.data.model.LibraryKind
+import com.mateof.tfmtv.data.model.LibraryScanStateDto
 import com.mateof.tfmtv.data.repo.LibraryErrors
 import com.mateof.tfmtv.data.repo.LibraryRepository
 import com.mateof.tfmtv.media.PlayEvent
 import com.mateof.tfmtv.media.PlayLauncher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,7 +41,9 @@ data class LibraryState(
     val movies: List<LibraryItemDto> = emptyList(),
     val series: List<LibraryItemDto> = emptyList(),
     val reviewFiles: List<LibraryFileDto> = emptyList(),
-    val loaded: Set<LibraryTab> = emptySet()
+    val loaded: Set<LibraryTab> = emptySet(),
+    val scanning: Boolean = false,
+    val scanMessage: String? = null
 ) {
     private val query: String get() = search.trim()
 
@@ -150,11 +154,58 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Has the server look through the indexed channels for new files and identify
+     * them. Progress is polled; the scan itself keeps going if the screen is left.
+     */
+    fun scan() {
+        if (_state.value.scanning) return
+        _state.update { it.copy(scanning = true, scanMessage = "Escaneando la biblioteca…") }
+        viewModelScope.launch {
+            val outcome = runCatching {
+                if (!repo.startScan()) {
+                    _state.update { it.copy(scanMessage = "Ya había un escaneo en marcha; siguiéndolo…") }
+                }
+                var last = repo.scanState()
+                while (last?.running == true) {
+                    _state.update { it.copy(scanMessage = progressText(last!!)) }
+                    delay(SCAN_POLL_MS)
+                    last = repo.scanState()
+                }
+                last
+            }
+            val text = outcome.fold(
+                onSuccess = { s ->
+                    when {
+                        s == null -> "Escaneo terminado."
+                        s.error != null -> "El escaneo terminó con un error: ${s.error}"
+                        s.cancelled -> "Escaneo cancelado. ${s.filesNew} ficheros nuevos."
+                        else -> "Escaneo terminado: ${s.filesNew} ficheros nuevos, ${s.matched} identificados, ${s.review + s.unmatched} por revisar."
+                    }
+                },
+                onFailure = { e -> LibraryErrors.unavailableMessage(e) ?: "No se pudo escanear: ${e.userMessage()}" }
+            )
+            _state.update { it.copy(scanning = false, scanMessage = text, loaded = emptySet()) }
+            if (outcome.isSuccess) refresh()
+        }
+    }
+
+    private fun progressText(s: LibraryScanStateDto): String = buildString {
+        append("Escaneando")
+        if (s.channelsTotal > 0) append(" ${s.channelsScanned}/${s.channelsTotal} canales")
+        s.currentChannel?.takeIf { it.isNotBlank() }?.let { append(" · $it") }
+        append(" · ${s.filesNew} nuevos")
+    }
+
     /** Continue watching: resumes where the server says it stopped. */
     fun play(file: LibraryFileDto) {
         viewModelScope.launch {
             val start = file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L
             _events.send(launcher.resolve(file.file, file.channelId, file.displayTitle(), start))
         }
+    }
+
+    private companion object {
+        const val SCAN_POLL_MS = 3_000L
     }
 }

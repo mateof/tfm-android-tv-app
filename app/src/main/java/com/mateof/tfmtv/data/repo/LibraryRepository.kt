@@ -10,6 +10,8 @@ import com.mateof.tfmtv.data.model.ItemWatchedRequest
 import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryItemDetailDto
 import com.mateof.tfmtv.data.model.LibraryItemDto
+import com.mateof.tfmtv.data.model.LibraryScanRequest
+import com.mateof.tfmtv.data.model.LibraryScanStateDto
 import com.mateof.tfmtv.data.model.LibraryStatsDto
 import com.mateof.tfmtv.data.model.MatchFileRequest
 import com.mateof.tfmtv.data.model.ProviderCandidateDto
@@ -95,6 +97,20 @@ class LibraryRepository @Inject constructor(
                 if (watched) api.markItemWatched(id, ItemWatchedRequest()) else api.markItemUnwatched(id)
             }
         }
+
+    /** Starts a scan of every indexed channel; false if one was already running. */
+    suspend fun startScan(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            apiCallNullable { api.scan(LibraryScanRequest()) }
+            true
+        } catch (e: ApiException) {
+            if (e.code == "already_running") false else throw e
+        }
+    }
+
+    suspend fun scanState(): LibraryScanStateDto? = withContext(Dispatchers.IO) {
+        apiCallNullable { api.scanState() }
+    }
 
     private companion object {
         const val PAGE_SIZE = 500

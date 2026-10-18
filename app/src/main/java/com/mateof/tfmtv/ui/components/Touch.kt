@@ -13,7 +13,20 @@ import androidx.compose.ui.input.pointer.pointerInput
  * usable on a phone or tablet.
  */
 @Composable
-fun Modifier.tapClick(onClick: () -> Unit): Modifier {
+fun Modifier.tapClick(onClick: () -> Unit): Modifier = tapClick(onClick, null)
+
+/**
+ * Same, with a long press. A separate overload on purpose: with a defaulted
+ * second lambda, `tapClick { … }` would bind the trailing lambda to it.
+ */
+@Composable
+fun Modifier.tapClick(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier {
     val current by rememberUpdatedState(onClick)
-    return pointerInput(Unit) { detectTapGestures { current() } }
+    val long by rememberUpdatedState(onLongClick)
+    return pointerInput(onLongClick != null) {
+        detectTapGestures(
+            onLongPress = if (long != null) ({ long?.invoke() }) else null,
+            onTap = { current() }
+        )
+    }
 }

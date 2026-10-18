@@ -138,3 +138,20 @@ data class FolderContentsDto(
     val stats: FolderStatsDto? = null,
     val breadcrumbs: List<BreadcrumbDto> = emptyList()
 )
+
+/** Empty body: the server defaults to every media type and only adds what is new. */
+@Serializable
+data class ChannelRefreshRequest(val force: Boolean = false)
+
+@Serializable
+data class ChannelRefreshResultDto(
+    val channelId: String = "",
+    val startedAt: String? = null,
+    val finishedAt: String? = null,
+    val failed: Boolean = false,
+    val photos: Int = 0,
+    val videos: Int = 0,
+    val audios: Int = 0,
+    val documents: Int = 0,
+    val total: Int = 0
+)

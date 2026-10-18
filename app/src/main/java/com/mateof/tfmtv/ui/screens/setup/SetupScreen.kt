@@ -16,10 +16,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -28,7 +30,8 @@ import androidx.lifecycle.viewModelScope
 import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
-import com.mateof.tfmtv.ui.components.dpadEscape
+import com.mateof.tfmtv.ui.components.ClickToEdit
+import com.mateof.tfmtv.ui.components.clickToEditColors
 import com.mateof.tfmtv.ui.components.tapClick
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -119,29 +122,34 @@ fun SetupScreen(onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            OutlinedTextField(
-                value = state.baseUrl,
-                onValueChange = vm::setUrl,
-                label = { androidx.compose.material3.Text("Servidor (ej. 192.168.1.10:5257)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Next
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(firstField)
-                    .dpadEscape(focusManager)
-            )
+            ClickToEdit(Modifier.fillMaxWidth().focusRequester(firstField)) { fieldModifier, _ ->
+                OutlinedTextField(
+                    value = state.baseUrl,
+                    onValueChange = vm::setUrl,
+                    label = { androidx.compose.material3.Text("Servidor (ej. 192.168.1.10:5257)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+                    colors = clickToEditColors(),
+                    modifier = fieldModifier.fillMaxWidth()
+                )
+            }
 
-            OutlinedTextField(
-                value = state.apiKey,
-                onValueChange = vm::setKey,
-                label = { androidx.compose.material3.Text("API key (opcional)") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth().dpadEscape(focusManager)
-            )
+            ClickToEdit(Modifier.fillMaxWidth()) { fieldModifier, done ->
+                OutlinedTextField(
+                    value = state.apiKey,
+                    onValueChange = vm::setKey,
+                    label = { androidx.compose.material3.Text("API key (opcional)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { done() }),
+                    colors = clickToEditColors(),
+                    modifier = fieldModifier.fillMaxWidth()
+                )
+            }
 
             if (state.error != null) {
                 Text(

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +40,13 @@ object VideoPlayerChoice {
     const val SYSTEM = "system"
 }
 
+/** How a video reaches a television sent to by DLNA. */
+enum class CastRouteMode(val label: String) {
+    AUTO("Automático"),
+    DIRECT("Directo desde el servidor"),
+    RELAY("A través de este aparato")
+}
+
 @Singleton
 class ServerPreferences @Inject constructor(
     @ApplicationContext private val context: Context
@@ -49,6 +57,8 @@ class ServerPreferences @Inject constructor(
         val CONFIGURED = booleanPreferencesKey("configured")
         val VIDEO_PLAYER = stringPreferencesKey("video_player")
         val SHOW_HIDDEN = booleanPreferencesKey("show_hidden_channels")
+        val CAST_ROUTE = stringPreferencesKey("cast_route")
+        val CAST_ADDRESSES = stringSetPreferencesKey("cast_addresses")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,6 +88,21 @@ class ServerPreferences @Inject constructor(
     val showHiddenChannels: StateFlow<Boolean> = context.dataStore.data
         .map { it[Keys.SHOW_HIDDEN] ?: false }
         .stateIn(scope, SharingStarted.Eagerly, false)
+
+    val castRoute: StateFlow<CastRouteMode> = context.dataStore.data
+        .map { p -> CastRouteMode.entries.firstOrNull { it.name == p[Keys.CAST_ROUTE] } ?: CastRouteMode.AUTO }
+        .stateIn(scope, SharingStarted.Eagerly, CastRouteMode.AUTO)
+
+    /** Televisions typed in by hand: the ones discovery never finds, so they are kept. */
+    val castAddresses: Flow<Set<String>> = context.dataStore.data.map { it[Keys.CAST_ADDRESSES].orEmpty() }
+
+    suspend fun saveCastRoute(value: CastRouteMode) {
+        context.dataStore.edit { p -> p[Keys.CAST_ROUTE] = value.name }
+    }
+
+    suspend fun rememberCastAddress(address: String) {
+        context.dataStore.edit { p -> p[Keys.CAST_ADDRESSES] = p[Keys.CAST_ADDRESSES].orEmpty() + address }
+    }
 
     suspend fun save(baseUrl: String, apiKey: String) {
         context.dataStore.edit { p ->

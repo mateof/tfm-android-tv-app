@@ -84,15 +84,18 @@ class LibraryItemViewModel @Inject constructor(
         return file to start
     }
 
-    fun play(file: LibraryFileDto, startMs: Long) {
+    fun titleFor(file: LibraryFileDto): String {
         val item = _state.value.item
-        val title = when {
+        return when {
             item == null -> file.fileName
             item.isSeries && file.episode != null -> "${item.title} · T${file.season ?: 1} E${file.episode}"
             else -> item.title
         }
+    }
+
+    fun play(file: LibraryFileDto, startMs: Long) {
         viewModelScope.launch {
-            _events.send(launcher.resolve(file.file, file.channelId, title, startMs))
+            _events.send(launcher.resolve(file.file, file.channelId, titleFor(file), startMs))
         }
     }
 
