@@ -188,6 +188,10 @@ class Handler(BaseHTTPRequestHandler):
                 if m.group(2):
                     end = min(int(m.group(2)), SIZE - 1)
                 status = 206
+        # Like the real GetFileStreamCached: open-ended ranges get at most 4 MB.
+        if status == 206 or not rng:
+            end = min(end, start + 4 * 1024 * 1024 - 1)
+            status = 206
         self.send_response(status)
         self.send_header("Content-Type", "video/x-matroska")
         self.send_header("Accept-Ranges", "bytes")

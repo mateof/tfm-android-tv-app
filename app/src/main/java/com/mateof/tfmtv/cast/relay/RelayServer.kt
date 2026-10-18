@@ -306,15 +306,34 @@ class RelayServer(
                     events.upstreamRefused(reply.code)
                     return
                 }
-                val headers = dlnaHeaders(current).toMutableList()
-                reply.header("Content-Length")?.let { headers += "Content-Length" to it }
-                reply.header("Content-Range")?.let { range ->
-                    headers += "Content-Range" to range
-                    range.substringAfter('/').toLongOrNull()?.let { totalBytes = it }
-                }
+                val piece = ContentRange.parse(reply.header("Content-Range"))
+                piece?.let { totalBytes = it.total }
                 if (reply.code == 200) reply.header("Content-Length")?.toLongOrNull()?.let { totalBytes = it }
-                if (reply.code == 206 || reply.header("Accept-Ranges") == "bytes") headers += "Accept-Ranges" to "bytes"
-                val status = if (reply.code == 206) 206 else 200
+                val wanted = ByteRange.parse(request.headers["range"])
+                val stitchTo = stitchEnd(reply.code, wanted, piece)
+
+                val headers = dlnaHeaders(current).toMutableList()
+                val status: Int
+                if (stitchTo != null && piece != null) {
+                    // The server caps every answer at a few MB however much was
+                    // asked for. ExoPlayer asks again; ffmpeg-based renderers
+                    // (AirScreen on Fire TV) take the short body for the end of
+                    // the file and stop. So the television gets one response up
+                    // to where it asked, and the pieces are fetched here.
+                    headers += "Content-Length" to (stitchTo - piece.start + 1).toString()
+                    headers += "Accept-Ranges" to "bytes"
+                    status = if (wanted == null) {
+                        200
+                    } else {
+                        headers += "Content-Range" to "bytes ${piece.start}-$stitchTo/${piece.total}"
+                        206
+                    }
+                } else {
+                    reply.header("Content-Length")?.let { headers += "Content-Length" to it }
+                    reply.header("Content-Range")?.let { headers += "Content-Range" to it }
+                    if (reply.code == 206 || reply.header("Accept-Ranges") == "bytes") headers += "Accept-Ranges" to "bytes"
+                    status = if (reply.code == 206) 206 else 200
+                }
                 exchange.code = status
                 writeHead(out, status, headers)
 
@@ -323,7 +342,8 @@ class RelayServer(
                 upstreamMs = (System.nanoTime() - asked) / 1_000_000
                 lastCut = false
                 requests.incrementAndGet()
-                copy(body.byteStream(), out, exchange, call)
+                if (!copy(body.byteStream(), out, exchange, call)) return
+                if (stitchTo != null && piece != null) stitch(current, out, exchange, piece.end + 1, stitchTo)
             }
         } finally {
             calls -= call
@@ -331,11 +351,64 @@ class RelayServer(
     }
 
     /**
+     * Where the television's response has to end when the server answered a
+     * shorter piece than asked for, or null when the answer can go as it is.
+     */
+    private fun stitchEnd(code: Int, wanted: ByteRange?, piece: ContentRange?): Long? {
+        if (code != 206 || piece == null) return null
+        if (piece.start != (wanted?.start ?: 0L)) return null
+        val end = minOf(wanted?.end ?: (piece.total - 1), piece.total - 1)
+        return end.takeIf { it > piece.end }
+    }
+
+    /** Fetches and forwards the pieces from [from] to [to], inclusive, one after another. */
+    private fun stitch(current: RelaySession, out: OutputStream, exchange: Exchange, from: Long, to: Long) {
+        var next = from
+        var pieces = 1
+        while (next <= to && !stopped) {
+            val call = http.newCall(
+                Request.Builder().url(current.upstreamUrl).header("Range", "bytes=$next-$to").build()
+            )
+            calls += call
+            try {
+                val reply = try {
+                    call.execute()
+                } catch (e: IOException) {
+                    exchange.ending = "el servidor no contestó al trozo ${pieces + 1}: ${e.message}"
+                    if (!call.isCanceled()) {
+                        lastCut = true
+                        events.upstreamCut(e.message)
+                    }
+                    return
+                }
+                reply.use {
+                    val piece = ContentRange.parse(it.header("Content-Range"))
+                    if (it.code != 206 || piece == null || piece.start != next) {
+                        // Anything else would put the wrong bytes in the middle of the film.
+                        exchange.ending = "el servidor contestó ${it.code} al trozo desde $next"
+                        events.upstreamRefused(it.code)
+                        return
+                    }
+                    val body = it.body ?: return
+                    pieces++
+                    if (!copy(body.byteStream(), out, exchange, call)) return
+                    next = piece.end + 1
+                }
+            } finally {
+                calls -= call
+            }
+        }
+        exchange.ending = "completa en $pieces trozos"
+    }
+
+    /**
      * Reads and writes are told apart because they mean different things: a
      * write failing is the television hanging up — routine, it does it on every
      * seek — while a read failing is the server cutting the response.
+     *
+     * @return true when the server's body ended normally.
      */
-    private fun copy(input: InputStream, out: OutputStream, exchange: Exchange, call: Call) {
+    private fun copy(input: InputStream, out: OutputStream, exchange: Exchange, call: Call): Boolean {
         val buffer = ByteArray(BUFFER_BYTES)
         while (true) {
             val read = try {
@@ -350,18 +423,18 @@ class RelayServer(
                     lastCut = true
                     events.upstreamCut(e.message)
                 }
-                return
+                return false
             }
             if (read < 0) {
                 exchange.ending = "completa"
-                return
+                return true
             }
             try {
                 out.write(buffer, 0, read)
             } catch (_: IOException) {
                 exchange.ending = if (stopped) "puente cerrado" else "la tele cerró la conexión"
                 call.cancel()
-                return
+                return false
             }
             exchange.bytes += read
             served.addAndGet(read.toLong())
@@ -428,5 +501,30 @@ class RelayServer(
         const val MAX_HEADER_BYTES = 16 * 1024
         const val BUFFER_BYTES = 64 * 1024
         const val SERVER_NAME = "TFMTV/relay UPnP/1.0 DLNADOC/1.50"
+    }
+}
+
+/** A request's `Range: bytes=start-[end]`; suffix and multi ranges are left alone. */
+internal data class ByteRange(val start: Long, val end: Long?) {
+    companion object {
+        private val SHAPE = Regex("bytes=(\\d+)-(\\d*)")
+
+        fun parse(header: String?): ByteRange? {
+            val match = header?.trim()?.let(SHAPE::matchEntire) ?: return null
+            return ByteRange(match.groupValues[1].toLong(), match.groupValues[2].toLongOrNull())
+        }
+    }
+}
+
+/** A response's `Content-Range: bytes start-end/total`. */
+internal data class ContentRange(val start: Long, val end: Long, val total: Long) {
+    companion object {
+        private val SHAPE = Regex("bytes (\\d+)-(\\d+)/(\\d+)")
+
+        fun parse(header: String?): ContentRange? {
+            val match = header?.trim()?.let(SHAPE::matchEntire) ?: return null
+            val (start, end, total) = match.destructured
+            return ContentRange(start.toLong(), end.toLong(), total.toLong())
+        }
     }
 }
