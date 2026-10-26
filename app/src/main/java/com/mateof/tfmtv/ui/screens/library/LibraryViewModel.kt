@@ -9,6 +9,7 @@ import com.mateof.tfmtv.data.model.LibraryItemDto
 import com.mateof.tfmtv.data.model.LibraryKind
 import com.mateof.tfmtv.data.model.LibraryScanStateDto
 import com.mateof.tfmtv.data.repo.LibraryErrors
+import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.repo.LibraryRepository
 import com.mateof.tfmtv.media.PlayEvent
 import com.mateof.tfmtv.media.PlayLauncher
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.Collator
+import java.util.Locale
 import javax.inject.Inject
 
 enum class LibraryTab(val label: String) {
@@ -42,6 +45,8 @@ data class LibraryState(
     val series: List<LibraryItemDto> = emptyList(),
     val reviewFiles: List<LibraryFileDto> = emptyList(),
     val loaded: Set<LibraryTab> = emptySet(),
+    val movieFilters: ItemFilters = ItemFilters(),
+    val seriesFilters: ItemFilters = ItemFilters(),
     val scanning: Boolean = false,
     val scanMessage: String? = null
 ) {
@@ -50,11 +55,21 @@ data class LibraryState(
     val visibleContinue: List<LibraryFileDto>
         get() = continueFiles.filter { query.isBlank() || it.displayTitle().contains(query, ignoreCase = true) }
 
+    private val tabItems: List<LibraryItemDto> get() = if (tab == LibraryTab.MOVIES) movies else series
+
+    val itemFilters: ItemFilters get() = if (tab == LibraryTab.SERIES) seriesFilters else movieFilters
+
     val visibleItems: List<LibraryItemDto>
-        get() = (if (tab == LibraryTab.MOVIES) movies else series).filter {
+        get() = itemFilters.apply(tabItems).filter {
             query.isBlank() || it.title.contains(query, ignoreCase = true)
                 || it.originalTitle?.contains(query, ignoreCase = true) == true
         }
+
+    /** Genres present in the tab, most common first, with how many titles have each. */
+    val genres: List<Pair<String, Int>>
+        get() = tabItems.flatMap { it.genres }.groupingBy { it }.eachCount()
+            .entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .map { it.key to it.value }
 
     val visibleReview: List<LibraryFileDto>
         get() = reviewFiles.filter {
@@ -70,13 +85,69 @@ fun LibraryFileDto.displayTitle(): String {
     } else item.title
 }
 
+enum class LibrarySort(val label: String) {
+    ADDED("Últimas añadidas"),
+    TITLE("Título (A-Z)"),
+    YEAR("Año (más recientes)"),
+    RATING("Mejor valoradas"),
+    LAST_PLAYED("Vistas recientemente")
+}
+
+enum class WatchFilter(val label: String) {
+    ALL("Todas"),
+    UNWATCHED("Sin ver"),
+    IN_PROGRESS("A medias"),
+    WATCHED("Vistas")
+}
+
+/** How the movie or series grid is ordered and narrowed down. */
+data class ItemFilters(
+    val sort: LibrarySort = LibrarySort.ADDED,
+    val watch: WatchFilter = WatchFilter.ALL,
+    val genre: String? = null
+) {
+    val narrowed: Boolean get() = watch != WatchFilter.ALL || genre != null
+
+    fun apply(items: List<LibraryItemDto>): List<LibraryItemDto> =
+        items.filter { (genre == null || genre in it.genres) && it.matches(watch) }.sortedWith(comparator())
+
+    private fun comparator(): Comparator<LibraryItemDto> {
+        val byTitle = compareBy(TITLE_ORDER) { it: LibraryItemDto -> it.title }
+        // Missing values always go to the end, whatever the direction.
+        return when (sort) {
+            LibrarySort.TITLE -> byTitle
+            LibrarySort.ADDED -> compareBy<LibraryItemDto, String?>(nullsLast(reverseOrder())) { it.addedAt }
+            LibrarySort.YEAR -> compareBy<LibraryItemDto, Int?>(nullsLast(reverseOrder())) { it.year }
+            LibrarySort.RATING -> compareBy<LibraryItemDto, Double?>(nullsLast(reverseOrder())) { it.rating }
+            LibrarySort.LAST_PLAYED -> compareBy<LibraryItemDto, String?>(nullsLast(reverseOrder())) { it.watch.lastPlayedAt }
+        }.then(byTitle)
+    }
+
+    private companion object {
+        val TITLE_ORDER: Comparator<String> =
+            Collator.getInstance(Locale("es")).apply { strength = Collator.PRIMARY }.let { c -> Comparator { a, b -> c.compare(a, b) } }
+    }
+}
+
+/** A series counts as started as soon as one episode has been watched. */
+private fun LibraryItemDto.matches(filter: WatchFilter): Boolean {
+    val started = watch.inProgress || watch.positionMs > 0 || watch.episodesWatched > 0
+    return when (filter) {
+        WatchFilter.ALL -> true
+        WatchFilter.WATCHED -> watch.completed
+        WatchFilter.IN_PROGRESS -> !watch.completed && started
+        WatchFilter.UNWATCHED -> !watch.completed && !started
+    }
+}
+
 /** Where a tab was left: what was on screen and which card the user left through. */
 data class TabPosition(val index: Int = 0, val offset: Int = 0, val key: String? = null)
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: LibraryRepository,
-    private val launcher: PlayLauncher
+    private val launcher: PlayLauncher,
+    private val prefs: ServerPreferences
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LibraryState())
@@ -89,6 +160,23 @@ class LibraryViewModel @Inject constructor(
     // on the back stack, so opening a detail and coming back lands on the same
     // place instead of at the top of the grid.
     private val positions = mutableMapOf<LibraryTab, TabPosition>()
+
+    init {
+        // The chosen order is remembered between sessions; filters are not.
+        viewModelScope.launch {
+            val movies = savedSort(LibraryKind.MOVIE)
+            val series = savedSort(LibraryKind.SERIES)
+            _state.update {
+                it.copy(
+                    movieFilters = it.movieFilters.copy(sort = movies ?: it.movieFilters.sort),
+                    seriesFilters = it.seriesFilters.copy(sort = series ?: it.seriesFilters.sort)
+                )
+            }
+        }
+    }
+
+    private suspend fun savedSort(kind: String): LibrarySort? =
+        prefs.librarySort(kind)?.let { name -> LibrarySort.entries.firstOrNull { it.name == name } }
 
     fun position(tab: LibraryTab): TabPosition = positions[tab] ?: TabPosition()
 
@@ -107,6 +195,24 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun setSearch(value: String) = _state.update { it.copy(search = value) }
+
+    /**
+     * Changes the order or filters of the visible movie/series tab. The list it
+     * was scrolled through is gone, so the grid starts again from the top.
+     */
+    fun setFilters(filters: ItemFilters) {
+        val tab = _state.value.tab
+        if (tab != LibraryTab.MOVIES && tab != LibraryTab.SERIES) return
+        val previous = _state.value.itemFilters
+        positions[tab] = TabPosition()
+        _state.update {
+            if (tab == LibraryTab.MOVIES) it.copy(movieFilters = filters) else it.copy(seriesFilters = filters)
+        }
+        if (filters.sort != previous.sort) {
+            val kind = if (tab == LibraryTab.MOVIES) LibraryKind.MOVIE else LibraryKind.SERIES
+            viewModelScope.launch { prefs.saveLibrarySort(kind, filters.sort.name) }
+        }
+    }
 
     /**
      * Reloads the visible tab, e.g. after playing or fixing something elsewhere.

@@ -120,5 +120,14 @@ class ServerPreferences @Inject constructor(
         context.dataStore.edit { p -> p[Keys.SHOW_HIDDEN] = value }
     }
 
+    /** Order of the library's movie or series grid, by [LibraryKind][com.mateof.tfmtv.data.model.LibraryKind]. */
+    suspend fun librarySort(kind: String): String? = context.dataStore.data.first()[librarySortKey(kind)]
+
+    suspend fun saveLibrarySort(kind: String, sort: String) {
+        context.dataStore.edit { p -> p[librarySortKey(kind)] = sort }
+    }
+
+    private fun librarySortKey(kind: String) = stringPreferencesKey("library_sort_$kind")
+
     suspend fun awaitLoaded(): ServerConfig = configFlow.first()
 }

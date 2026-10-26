@@ -51,6 +51,8 @@ import com.mateof.tfmtv.ui.cast.CastViewModel
 import com.mateof.tfmtv.ui.components.EmptyState
 import com.mateof.tfmtv.ui.components.ErrorState
 import com.mateof.tfmtv.ui.components.Loading
+import com.mateof.tfmtv.ui.components.OptionPicker
+import com.mateof.tfmtv.ui.components.PickerOption
 import com.mateof.tfmtv.ui.components.PosterCard
 import com.mateof.tfmtv.ui.components.SearchField
 import com.mateof.tfmtv.ui.components.TabChip
@@ -153,6 +155,10 @@ fun LibraryContent(
             }
         }
 
+        if ((state.tab == LibraryTab.MOVIES || state.tab == LibraryTab.SERIES) && state.tab in state.loaded) {
+            FilterBar(state = state, onChange = vm::setFilters)
+        }
+
         message?.let {
             Text(
                 text = it,
@@ -188,6 +194,7 @@ fun LibraryContent(
                         items = state.visibleItems,
                         tab = tab,
                         search = state.search,
+                        filters = state.itemFilters,
                         position = vm.position(tab),
                         onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
                         onOpen = { id ->
@@ -221,8 +228,14 @@ private fun fileKey(file: LibraryFileDto) = "${file.channelId}-${file.fileId}"
  * a detail screen and coming back does not send the user back to the top.
  */
 @Composable
-private fun rememberTabGridState(tab: LibraryTab, position: TabPosition, onScroll: (Int, Int) -> Unit): LazyGridState {
-    val state = rememberSaveable(tab, saver = LazyGridState.Saver) {
+private fun rememberTabGridState(
+    tab: LibraryTab,
+    position: TabPosition,
+    onScroll: (Int, Int) -> Unit,
+    contentKey: Any? = null
+): LazyGridState {
+    // A new order or filter is a different list: start it from the top.
+    val state = rememberSaveable(tab, contentKey, saver = LazyGridState.Saver) {
         LazyGridState(position.index, position.offset)
     }
     LaunchedEffect(state) {
@@ -325,6 +338,7 @@ private fun ItemGrid(
     items: List<LibraryItemDto>,
     tab: LibraryTab,
     search: String,
+    filters: ItemFilters,
     position: TabPosition,
     onScroll: (Int, Int) -> Unit,
     onOpen: (String) -> Unit
@@ -333,6 +347,7 @@ private fun ItemGrid(
         EmptyState(
             when {
                 search.isNotBlank() -> "Nada coincide con «$search»."
+                filters.narrowed -> "Nada coincide con los filtros elegidos."
                 tab == LibraryTab.MOVIES -> "Todavía no hay películas identificadas. Lanza un escaneo desde la web del servidor."
                 else -> "Todavía no hay series identificadas. Lanza un escaneo desde la web del servidor."
             }
@@ -340,7 +355,7 @@ private fun ItemGrid(
         return
     }
     val urls = rememberMediaUrls()
-    val gridState = rememberTabGridState(tab, position, onScroll)
+    val gridState = rememberTabGridState(tab, position, onScroll, contentKey = filters)
     val focus = rememberFocusRestore(tab, position)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(170.dp),
@@ -370,6 +385,77 @@ private fun ItemGrid(
             )
             focus.RequestOnce(isTarget)
         }
+    }
+}
+
+private enum class FilterPicker { SORT, WATCH, GENRE }
+
+/** Order, watch state and genre of the movie/series grid, like other media apps. */
+@Composable
+private fun FilterBar(state: LibraryState, onChange: (ItemFilters) -> Unit) {
+    val filters = state.itemFilters
+    var open by remember { mutableStateOf<FilterPicker?>(null) }
+    Row(
+        modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TabChip(
+            label = "Orden: ${filters.sort.label}",
+            selected = false,
+            onClick = { open = FilterPicker.SORT }
+        )
+        TabChip(
+            label = "Mostrar: ${filters.watch.label}",
+            selected = filters.watch != WatchFilter.ALL,
+            onClick = { open = FilterPicker.WATCH }
+        )
+        if (state.genres.isNotEmpty() || filters.genre != null) {
+            TabChip(
+                label = filters.genre ?: "Todos los géneros",
+                selected = filters.genre != null,
+                onClick = { open = FilterPicker.GENRE }
+            )
+        }
+        if (filters.narrowed) {
+            TabChip(
+                label = "Quitar filtros",
+                selected = false,
+                onClick = { onChange(filters.copy(watch = WatchFilter.ALL, genre = null)) }
+            )
+        }
+        Text(
+            text = state.visibleItems.size.let { if (it == 1) "1 título" else "$it títulos" },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+
+    when (open) {
+        FilterPicker.SORT -> OptionPicker(
+            title = "Ordenar por",
+            options = LibrarySort.entries.map { PickerOption(it, it.label) },
+            selected = filters.sort,
+            onSelect = { onChange(filters.copy(sort = it)) },
+            onDismiss = { open = null }
+        )
+        FilterPicker.WATCH -> OptionPicker(
+            title = "Mostrar",
+            options = WatchFilter.entries.map { PickerOption(it, it.label) },
+            selected = filters.watch,
+            onSelect = { onChange(filters.copy(watch = it)) },
+            onDismiss = { open = null }
+        )
+        FilterPicker.GENRE -> OptionPicker(
+            title = "Género",
+            options = listOf(PickerOption<String?>(null, "Todos los géneros")) +
+                state.genres.map { (genre, count) -> PickerOption<String?>(genre, genre, count.toString()) },
+            selected = filters.genre,
+            onSelect = { onChange(filters.copy(genre = it)) },
+            onDismiss = { open = null }
+        )
+        null -> Unit
     }
 }
 
