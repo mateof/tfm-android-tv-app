@@ -1,5 +1,7 @@
 package com.mateof.tfmtv.ui.screens.library
 
+import com.mateof.tfmtv.ui.components.listRowBorder
+import com.mateof.tfmtv.ui.components.listRowColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.OutlinedTextField
@@ -31,13 +34,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -46,14 +49,15 @@ import com.mateof.tfmtv.data.model.LibraryKind
 import com.mateof.tfmtv.data.model.ProviderCandidateDto
 import com.mateof.tfmtv.ui.components.EmptyState
 import com.mateof.tfmtv.ui.components.Loading
-import com.mateof.tfmtv.ui.components.PosterImage
+import com.mateof.tfmtv.ui.components.Art
+import com.mateof.tfmtv.ui.components.PillButton
 import com.mateof.tfmtv.ui.components.SearchField
 import com.mateof.tfmtv.ui.components.TabChip
 import com.mateof.tfmtv.ui.components.ClickToEdit
 import com.mateof.tfmtv.ui.components.clickToEditColors
 import com.mateof.tfmtv.ui.components.rememberMediaUrls
 import com.mateof.tfmtv.ui.components.tapClick
-import com.mateof.tfmtv.ui.theme.Background
+import com.mateof.tfmtv.ui.theme.palette
 import kotlinx.coroutines.delay
 
 /** Manual identification of a file or a whole item. A screen, not a dialog: focus stays simple. */
@@ -79,7 +83,7 @@ fun IdentifyScreen(target: IdentifyTarget, onDone: () -> Unit) {
         runCatching { if (state.results.isNotEmpty()) firstResultFocus.requestFocus() else chipFocus.requestFocus() }
     }
 
-    Column(Modifier.fillMaxSize().background(Background).padding(start = 48.dp, end = 48.dp, top = 28.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = 48.dp, end = 48.dp, top = 28.dp)) {
         Text("Corregir identificación", style = MaterialTheme.typography.headlineSmall)
         Text(
             text = if (state.isFile) "Se aplicará sólo a este fichero" else "Se aplicará a todos los ficheros del título",
@@ -137,9 +141,7 @@ fun IdentifyScreen(target: IdentifyTarget, onDone: () -> Unit) {
 
         if (state.isFile) {
             Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = vm::ignore, enabled = !state.busy, modifier = Modifier.tapClick(vm::ignore)) {
-                    Text("Ignorar este fichero")
-                }
+                PillButton("Ignorar este fichero", Icons.Outlined.Block, vm::ignore, enabled = !state.busy)
             }
         }
 
@@ -182,13 +184,10 @@ private fun CandidateRow(candidate: ProviderCandidateDto, onClick: () -> Unit, m
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().tapClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary
-        )
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(14.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.015f),
+        border = listRowBorder(),
+        colors = listRowColors()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -202,9 +201,11 @@ private fun CandidateRow(candidate: ProviderCandidateDto, onClick: () -> Unit, m
                     .clip(RoundedCornerShape(6.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                PosterImage(
-                    urls.absolute(candidate.posterUrl),
-                    if (candidate.kind == LibraryKind.SERIES) Icons.Outlined.Tv else Icons.Outlined.Movie
+                Art(
+                    urls.libraryImage(candidate.posterUrl, "w154"),
+                    candidate.title,
+                    if (candidate.kind == LibraryKind.SERIES) Icons.Outlined.Tv else Icons.Outlined.Movie,
+                    iconSize = 24.dp
                 )
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

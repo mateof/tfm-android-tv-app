@@ -37,15 +37,29 @@ class VideoPlayers @Inject constructor(
             .toList()
     }
 
+    /** Asks which app to play it with, whatever the setting says. False when there is none. */
+    fun choose(url: String, title: String): Boolean = start(
+        Intent.createChooser(viewIntent(url, title), "Reproducir con").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+
+    private fun viewIntent(url: String, title: String) = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(url), "video/*")
+        putExtra("title", title)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    private fun start(intent: Intent): Boolean = try {
+        context.startActivity(intent)
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
+
     /** @return false when the internal player should take over. */
     fun launchExternal(url: String, title: String): Boolean {
         val choice = prefs.videoPlayer.value
         if (choice.isBlank() || choice == VideoPlayerChoice.INTERNAL) return false
-        val view = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse(url), "video/*")
-            putExtra("title", title)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val view = viewIntent(url, title)
         val intent = when (choice) {
             VideoPlayerChoice.ASK -> Intent.createChooser(view, "Reproducir con").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -53,11 +67,6 @@ class VideoPlayers @Inject constructor(
             VideoPlayerChoice.SYSTEM -> view
             else -> view.apply { setPackage(choice) }
         }
-        return try {
-            context.startActivity(intent)
-            true
-        } catch (e: ActivityNotFoundException) {
-            false
-        }
+        return start(intent)
     }
 }

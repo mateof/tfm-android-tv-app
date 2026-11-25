@@ -6,6 +6,7 @@ import com.mateof.tfmtv.core.userMessage
 import com.mateof.tfmtv.data.model.LibraryEpisodeDto
 import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryItemDetailDto
+import com.mateof.tfmtv.data.repo.LibraryActions
 import com.mateof.tfmtv.data.repo.LibraryRepository
 import com.mateof.tfmtv.media.PlayEvent
 import com.mateof.tfmtv.media.PlayLauncher
@@ -34,8 +35,12 @@ data class LibraryItemState(
 @HiltViewModel
 class LibraryItemViewModel @Inject constructor(
     private val repo: LibraryRepository,
+    private val actions: LibraryActions,
     private val launcher: PlayLauncher
 ) : ViewModel() {
+
+    /** The episode or version the screen was left through. */
+    var lastFocus: String? = null
 
     private var itemId: String = ""
 
@@ -58,7 +63,13 @@ class LibraryItemViewModel @Inject constructor(
                         s.copy(loading = false, item = detail, season = season)
                     }
                 }
-                .onFailure { e -> _state.update { it.copy(loading = false, error = e.userMessage()) } }
+                .onFailure { e ->
+                    _state.update {
+                        // With the item on screen a failed reload is only a notice.
+                        if (it.item == null) it.copy(loading = false, error = e.userMessage())
+                        else it.copy(loading = false, message = e.userMessage())
+                    }
+                }
         }
     }
 
@@ -111,4 +122,43 @@ class LibraryItemViewModel @Inject constructor(
                 .onFailure { e -> _state.update { it.copy(busy = false, message = e.userMessage()) } }
         }
     }
+
+    fun setSeasonWatched(season: Int, watched: Boolean) {
+        val item = _state.value.item ?: return
+        viewModelScope.launch {
+            runCatching { repo.setItemWatched(item.id, watched, season) }
+                .onSuccess { updated ->
+                    _state.update {
+                        it.copy(item = updated ?: it.item, message = "Temporada $season marcada como ${if (watched) "vista" else "no vista"}")
+                    }
+                    if (updated == null) load(item.id)
+                }
+                .onFailure { e -> say("No se pudo: ${e.userMessage()}") }
+        }
+    }
+
+    fun setWatched(file: LibraryFileDto, watched: Boolean) {
+        viewModelScope.launch {
+            val result = actions.setWatched(file, watched)
+            say(result.getOrElse { it.message.orEmpty() })
+            if (result.isSuccess) load(itemId)
+        }
+    }
+
+    /** Asks the provider for the metadata and the episodes again. */
+    fun refreshMetadata() {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, message = "Actualizando los datos…") }
+        viewModelScope.launch {
+            runCatching { repo.refreshItem(itemId) }
+                .onSuccess {
+                    _state.update { it.copy(busy = false, message = "Datos actualizados") }
+                    load(itemId)
+                }
+                .onFailure { e -> _state.update { it.copy(busy = false, message = "No se pudo: ${e.userMessage()}") } }
+        }
+    }
+
+    fun say(text: String) = _state.update { it.copy(message = text) }
+    fun messageShown() = _state.update { it.copy(message = null) }
 }

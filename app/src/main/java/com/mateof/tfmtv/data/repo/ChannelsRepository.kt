@@ -7,6 +7,7 @@ import com.mateof.tfmtv.core.apiCallPaged
 import com.mateof.tfmtv.data.api.ChannelsApi
 import com.mateof.tfmtv.data.model.ChannelDto
 import com.mateof.tfmtv.data.model.ChannelFoldersDto
+import com.mateof.tfmtv.data.model.ChannelRefreshProgressDto
 import com.mateof.tfmtv.data.model.ChannelRefreshRequest
 import com.mateof.tfmtv.data.model.ChannelRefreshResultDto
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,27 @@ class ChannelsRepository @Inject constructor(
 
     suspend fun refreshRunning(id: Long): Boolean = withContext(Dispatchers.IO) {
         apiCall { api.refreshRunning(id.toString()) }
+    }
+
+    /** Null when nothing runs. */
+    suspend fun refreshProgress(id: Long): ChannelRefreshProgressDto? = withContext(Dispatchers.IO) {
+        apiCallNullable { api.refreshProgress(id.toString()) }
+    }
+
+    suspend fun cancelRefresh(id: Long) {
+        withContext(Dispatchers.IO) { apiCallNullable { api.cancelRefresh(id.toString()) } }
+    }
+
+    suspend fun setFavorite(id: Long, favorite: Boolean) {
+        withContext(Dispatchers.IO) {
+            apiCallNullable { if (favorite) api.addFavorite(id.toString()) else api.removeFavorite(id.toString()) }
+        }
+    }
+
+    suspend fun setHidden(id: Long, hidden: Boolean) {
+        withContext(Dispatchers.IO) {
+            apiCallNullable { if (hidden) api.hide(id.toString()) else api.unhide(id.toString()) }
+        }
     }
 
     suspend fun refreshResult(id: Long): ChannelRefreshResultDto? = withContext(Dispatchers.IO) {

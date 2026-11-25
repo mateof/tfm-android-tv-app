@@ -33,6 +33,29 @@ object Format {
         }
     }
 
+    private val dayFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es"))
+
+    /** The date without the time: "3 nov 2026". */
+    fun day(iso: String?): String {
+        if (iso.isNullOrBlank()) return ""
+        return runCatching {
+            Instant.parse(iso).atZone(ZoneId.systemDefault()).format(dayFormatter)
+        }.getOrElse {
+            runCatching { java.time.LocalDate.parse(iso.take(10)).format(dayFormatter) }.getOrDefault(iso)
+        }
+    }
+
+    /** "1 h 52 min". */
+    fun minutes(total: Int): String =
+        if (total >= 60) "${total / 60} h" + (if (total % 60 > 0) " ${total % 60} min" else "") else "$total min"
+
+    /** What is left to watch: "Quedan 43 min"; null when it is not known. */
+    fun remaining(positionMs: Long, durationMs: Long): String? {
+        if (durationMs <= 0 || positionMs >= durationMs) return null
+        val left = ((durationMs - positionMs + 59_999) / 60_000).toInt()
+        return if (left == 1) "Queda 1 min" else "Quedan ${minutes(left)}"
+    }
+
     fun duration(ms: Long): String {
         if (ms <= 0) return "0:00"
         val totalSec = ms / 1000

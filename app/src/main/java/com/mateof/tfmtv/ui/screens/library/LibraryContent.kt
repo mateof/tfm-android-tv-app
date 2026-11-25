@@ -1,10 +1,14 @@
 package com.mateof.tfmtv.ui.screens.library
 
+import com.mateof.tfmtv.ui.components.listRowBorder
+import com.mateof.tfmtv.ui.components.listRowColors
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,9 +20,13 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FilterAltOff
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Radar
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,8 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,6 +47,7 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.mateof.tfmtv.core.Format
 import com.mateof.tfmtv.data.model.LibraryFileDto
 import com.mateof.tfmtv.data.model.LibraryFileStatus
 import com.mateof.tfmtv.data.model.LibraryItemDto
@@ -48,17 +56,29 @@ import com.mateof.tfmtv.media.PlayEvent
 import com.mateof.tfmtv.ui.cast.CastSheet
 import com.mateof.tfmtv.ui.cast.CastTarget
 import com.mateof.tfmtv.ui.cast.CastViewModel
+import com.mateof.tfmtv.ui.components.AmbientBackdrop
+import com.mateof.tfmtv.ui.components.ContentEnd
+import com.mateof.tfmtv.ui.components.ContentStart
 import com.mateof.tfmtv.ui.components.EmptyState
 import com.mateof.tfmtv.ui.components.ErrorState
-import com.mateof.tfmtv.ui.components.Loading
+import com.mateof.tfmtv.ui.components.IconPill
+import com.mateof.tfmtv.ui.components.MessageBar
 import com.mateof.tfmtv.ui.components.OptionPicker
 import com.mateof.tfmtv.ui.components.PickerOption
-import com.mateof.tfmtv.ui.components.PosterCard
+import com.mateof.tfmtv.ui.components.PosterTile
+import com.mateof.tfmtv.ui.components.ProgressBar
 import com.mateof.tfmtv.ui.components.SearchField
+import com.mateof.tfmtv.ui.components.SkeletonGrid
 import com.mateof.tfmtv.ui.components.TabChip
+import com.mateof.tfmtv.ui.components.WideTile
+import com.mateof.tfmtv.ui.components.entryFocus
+import com.mateof.tfmtv.ui.components.rememberFocusReturn
 import com.mateof.tfmtv.ui.components.rememberMediaUrls
+import com.mateof.tfmtv.ui.components.returnFocus
 import com.mateof.tfmtv.ui.components.tapClick
-import kotlinx.coroutines.delay
+import com.mateof.tfmtv.ui.components.thumbnailOf
+import com.mateof.tfmtv.ui.theme.OnSurfaceMuted
+import com.mateof.tfmtv.ui.theme.palette
 
 /** What the identify screen needs to know about the file (or item) being corrected. */
 data class IdentifyTarget(
@@ -81,143 +101,150 @@ fun LibraryContent(
     val vm: LibraryViewModel = hiltViewModel()
     val castVm: CastViewModel = hiltViewModel()
     val state by vm.state.collectAsStateWithLifecycle()
-    var message by remember { mutableStateOf<String?>(null) }
+    val urls = rememberMediaUrls()
+    var menu by remember { mutableStateOf<LibraryMenuTarget?>(null) }
+    var ambient by remember { mutableStateOf<String?>(null) }
 
     // Coming back from a detail, the player or the identify screen: progress may
-    // have changed, so reload, but keep whatever is on screen. Focus only goes
-    // to the tabs on a fresh entry; when there is a card to come back to, that
-    // card takes the focus (and a focused text field would pop the TV keyboard).
-    val tabFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        val comingBack = vm.position(vm.state.value.tab).key != null
-        vm.refresh()
-        if (!comingBack) {
-            delay(120)
-            runCatching { tabFocus.requestFocus() }
-        }
-    }
+    // have changed, so reload, but keep whatever is on screen.
+    LaunchedEffect(Unit) { vm.refresh() }
 
     LaunchedEffect(Unit) {
         vm.events.collect { event ->
             when (event) {
                 is PlayEvent.Internal -> onPlayInternal(event)
-                is PlayEvent.Failed -> message = event.message
+                is PlayEvent.Failed -> vm.say(event.message)
                 PlayEvent.Handed -> Unit
             }
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.padding(start = 40.dp, end = 40.dp, top = 24.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Biblioteca",
-                style = MaterialTheme.typography.headlineSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            TabChip(
-                label = if (state.scanning) "Escaneando…" else "Reescanear biblioteca",
-                selected = state.scanning,
-                onClick = vm::scan
-            )
-            SearchField(
-                value = state.search,
-                onValueChange = vm::setSearch,
-                label = "Buscar título",
-                modifier = Modifier.width(360.dp)
-            )
-        }
-        state.scanMessage?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 40.dp, bottom = 8.dp)
-            )
-        }
-
-        Row(
-            modifier = Modifier.padding(start = 40.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            LibraryTab.entries.forEach { tab ->
-                TabChip(
-                    label = tab.label,
-                    selected = state.tab == tab,
-                    onClick = { vm.selectTab(tab) },
-                    modifier = if (state.tab == tab) Modifier.focusRequester(tabFocus) else Modifier
+    Box(Modifier.fillMaxSize()) {
+        AmbientBackdrop(ambient)
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = ContentStart, end = ContentEnd, top = 22.dp, bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LibraryTab.entries.forEach { tab ->
+                    TabChip(
+                        label = tab.label,
+                        selected = state.tab == tab,
+                        onClick = {
+                            ambient = null
+                            vm.selectTab(tab)
+                        },
+                        // With a card to come back to, the focus goes there instead.
+                        modifier = Modifier.entryFocus(state.tab == tab && vm.position(tab).key == null)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                IconPill(
+                    icon = if (state.scanning) Icons.Outlined.Close else Icons.Outlined.Radar,
+                    label = if (state.scanning) "Cancelar escaneo" else "Reescanear",
+                    selected = state.scanning,
+                    onClick = vm::scan
+                )
+                SearchField(
+                    value = state.search,
+                    onValueChange = vm::setSearch,
+                    label = "Buscar título",
+                    modifier = Modifier.width(200.dp)
                 )
             }
-        }
+            state.scanMessage?.let { text ->
+                Row(
+                    Modifier.padding(start = ContentStart, end = ContentEnd, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(text, style = MaterialTheme.typography.bodySmall, color = OnSurfaceMuted)
+                    state.scanProgress?.let { ProgressBar(it, Modifier.width(220.dp)) }
+                }
+            }
+            if ((state.tab == LibraryTab.MOVIES || state.tab == LibraryTab.SERIES) && state.tab in state.loaded) {
+                FilterBar(state = state, onChange = vm::setFilters)
+            }
 
-        if ((state.tab == LibraryTab.MOVIES || state.tab == LibraryTab.SERIES) && state.tab in state.loaded) {
-            FilterBar(state = state, onChange = vm::setFilters)
-        }
+            Box(Modifier.fillMaxSize()) {
+                val tab = state.tab
+                when {
+                    state.loading -> when (tab) {
+                        LibraryTab.CONTINUE, LibraryTab.HISTORY -> SkeletonGrid(columns = 4, ratio = 1.3f)
+                        LibraryTab.REVIEW -> SkeletonGrid(columns = 1, ratio = 14f, rows = 5)
+                        else -> SkeletonGrid(columns = 6, ratio = 0.56f, rows = 2)
+                    }
+                    state.unavailable != null -> EmptyState(state.unavailable!!)
+                    state.error != null -> ErrorState(state.error!!, onRetry = vm::refresh)
+                    else -> when (tab) {
+                        LibraryTab.CONTINUE, LibraryTab.HISTORY -> FileGrid(
+                            files = if (tab == LibraryTab.CONTINUE) state.visibleContinue else state.visibleHistory,
+                            tab = tab,
+                            search = state.search,
+                            position = vm.position(tab),
+                            onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
+                            onFocused = { ambient = urls.libraryImage(it.item?.posterUrl, "w92") },
+                            onPlay = { file ->
+                                vm.saveFocus(tab, fileKey(file))
+                                vm.play(file)
+                            },
+                            onMenu = { file ->
+                                vm.saveFocus(tab, fileKey(file))
+                                menu = LibraryMenuTarget.File(file)
+                            }
+                        )
 
-        message?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(start = 40.dp, bottom = 8.dp)
-            )
-        }
+                        LibraryTab.MOVIES, LibraryTab.SERIES -> ItemGrid(
+                            items = state.visibleItems,
+                            tab = tab,
+                            search = state.search,
+                            filters = state.itemFilters,
+                            position = vm.position(tab),
+                            onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
+                            onFocused = { ambient = urls.libraryImage(it.posterUrl, "w92") },
+                            onOpen = { id ->
+                                vm.saveFocus(tab, id)
+                                onOpenItem(id)
+                            },
+                            onMenu = { item ->
+                                vm.saveFocus(tab, item.id)
+                                menu = LibraryMenuTarget.Item(item)
+                            }
+                        )
 
-        Box(Modifier.fillMaxSize()) {
-            val tab = state.tab
-            when {
-                state.loading -> Loading()
-                state.unavailable != null -> EmptyState(state.unavailable!!)
-                state.error != null -> ErrorState(state.error!!, onRetry = vm::refresh)
-                else -> when (tab) {
-                    LibraryTab.CONTINUE -> ContinueGrid(
-                        files = state.visibleContinue,
-                        search = state.search,
-                        position = vm.position(tab),
-                        onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
-                        onPlay = { file ->
-                            vm.saveFocus(tab, fileKey(file))
-                            vm.play(file)
-                        },
-                        onCast = { file ->
-                            val start = file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L
-                            castVm.open(CastTarget(file.file, file.channelId, file.displayTitle(), start))
-                        }
-                    )
-
-                    LibraryTab.MOVIES, LibraryTab.SERIES -> ItemGrid(
-                        items = state.visibleItems,
-                        tab = tab,
-                        search = state.search,
-                        filters = state.itemFilters,
-                        position = vm.position(tab),
-                        onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
-                        onOpen = { id ->
-                            vm.saveFocus(tab, id)
-                            onOpenItem(id)
-                        }
-                    )
-
-                    LibraryTab.REVIEW -> ReviewList(
-                        files = state.visibleReview,
-                        search = state.search,
-                        position = vm.position(tab),
-                        onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
-                        onIdentify = { file, target ->
-                            vm.saveFocus(tab, fileKey(file))
-                            onIdentify(target)
-                        }
-                    )
+                        LibraryTab.REVIEW -> ReviewList(
+                            files = state.visibleReview,
+                            search = state.search,
+                            position = vm.position(tab),
+                            onScroll = { index, offset -> vm.saveScroll(tab, index, offset) },
+                            onIdentify = { file ->
+                                vm.saveFocus(tab, fileKey(file))
+                                onIdentify(file.identifyTarget())
+                            }
+                        )
+                    }
                 }
             }
         }
+        MessageBar(state.message, vm::messageShown)
     }
 
+    menu?.let { target ->
+        LibraryMenu(
+            target = target,
+            onDismiss = { menu = null },
+            onPlay = { file, start -> vm.play(file, start) },
+            onOpen = onOpenItem,
+            onCast = { file ->
+                castVm.open(CastTarget(file.file, file.channelId, file.displayTitle(), file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L))
+            },
+            onIdentify = onIdentify,
+            onFileWatched = vm::setWatched,
+            onItemWatched = vm::setWatched,
+            onForget = vm::forget
+        )
+    }
     CastSheet(castVm, onOpenPanel = onOpenCastPanel)
 }
 
@@ -257,78 +284,58 @@ private fun rememberTabListState(tab: LibraryTab, position: TabPosition, onScrol
     return state
 }
 
-/**
- * Focus handling for the card the user left through: it keeps the requester
- * attached to that card and fires once, after the row has been laid out.
- */
-private class FocusRestore(val key: String?) {
-    val requester = FocusRequester()
-    var done = false
-}
-
+/** Files half way or already seen. */
 @Composable
-private fun rememberFocusRestore(tab: LibraryTab, position: TabPosition): FocusRestore =
-    // Deliberately not rememberSaveable: navigating away and back must restore
-    // the focus again, and a saved "already done" flag would swallow it.
-    remember(tab, position.key) { FocusRestore(position.key) }
-
-@Composable
-private fun FocusRestore.RequestOnce(isTarget: Boolean) {
-    if (!isTarget || done) return
-    LaunchedEffect(Unit) {
-        delay(80)   // the card has to exist before it can take focus
-        runCatching { requester.requestFocus() }
-        done = true
-    }
-}
-
-@Composable
-private fun ContinueGrid(
+private fun FileGrid(
     files: List<LibraryFileDto>,
+    tab: LibraryTab,
     search: String,
     position: TabPosition,
     onScroll: (Int, Int) -> Unit,
+    onFocused: (LibraryFileDto) -> Unit,
     onPlay: (LibraryFileDto) -> Unit,
-    onCast: (LibraryFileDto) -> Unit
+    onMenu: (LibraryFileDto) -> Unit
 ) {
     if (files.isEmpty()) {
         EmptyState(
-            if (search.isBlank()) "Nada a medias. Lo que dejes empezado aparecerá aquí."
-            else "Nada coincide con «$search»."
+            when {
+                search.isNotBlank() -> "Nada coincide con «$search»."
+                tab == LibraryTab.HISTORY -> "Todavía no hay nada visto."
+                else -> "Nada a medias. Lo que dejes empezado aparecerá aquí."
+            }
         )
         return
     }
     val urls = rememberMediaUrls()
-    val gridState = rememberTabGridState(LibraryTab.CONTINUE, position, onScroll)
-    val focus = rememberFocusRestore(LibraryTab.CONTINUE, position)
+    val gridState = rememberTabGridState(tab, position, onScroll)
+    val back = rememberFocusReturn(position.key, tab)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(170.dp),
+        columns = GridCells.Adaptive(180.dp),
         state = gridState,
-        contentPadding = PaddingValues(start = 40.dp, end = 40.dp, bottom = 40.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        contentPadding = PaddingValues(start = ContentStart, end = ContentEnd, top = 8.dp, bottom = 40.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(files, key = { fileKey(it) }) { file ->
             val item = file.item
-            val subtitle = when {
-                item != null && item.kind == LibraryKind.SERIES && file.episode != null ->
-                    "T${file.season ?: 1} · E${file.episode}"
-                item != null -> item.year?.toString()
-                else -> file.sizeText
-            }
-            val isTarget = fileKey(file) == focus.key
-            PosterCard(
+            val subtitle = listOfNotNull(
+                if (item?.kind == LibraryKind.SERIES && file.episode != null) "T${file.season ?: 1} E${file.episode}"
+                else item?.year?.toString() ?: file.sizeText.takeIf { item == null },
+                if (tab == LibraryTab.HISTORY) Format.day(file.watch?.lastPlayedAt).takeIf { it.isNotBlank() }
+                else file.watch?.let { Format.remaining(it.positionMs, it.durationMs) }
+            ).joinToString(" · ")
+            WideTile(
                 title = item?.title ?: file.fileName,
                 subtitle = subtitle,
-                imageUrl = urls.absolute(item?.posterUrl),
-                progress = file.watch?.progress?.toFloat(),
+                imageUrl = urls.libraryImage(item?.backdropUrl, "w500") ?: thumbnailOf(file.file),
+                progress = file.watch?.takeIf { it.inProgress }?.progress?.toFloat(),
                 completed = file.watch?.completed == true,
                 placeholder = if (item?.kind == LibraryKind.SERIES) Icons.Outlined.Tv else Icons.Outlined.Movie,
                 onClick = { onPlay(file) },
-                onLongClick = { onCast(file) },
-                modifier = if (isTarget) Modifier.focusRequester(focus.requester) else Modifier
+                onLongClick = { onMenu(file) },
+                onFocused = { onFocused(file) },
+                modifier = Modifier.returnFocus(back, fileKey(file))
             )
-            focus.RequestOnce(isTarget)
         }
     }
 }
@@ -341,49 +348,49 @@ private fun ItemGrid(
     filters: ItemFilters,
     position: TabPosition,
     onScroll: (Int, Int) -> Unit,
-    onOpen: (String) -> Unit
+    onFocused: (LibraryItemDto) -> Unit,
+    onOpen: (String) -> Unit,
+    onMenu: (LibraryItemDto) -> Unit
 ) {
     if (items.isEmpty()) {
         EmptyState(
             when {
                 search.isNotBlank() -> "Nada coincide con «$search»."
                 filters.narrowed -> "Nada coincide con los filtros elegidos."
-                tab == LibraryTab.MOVIES -> "Todavía no hay películas identificadas. Lanza un escaneo desde la web del servidor."
-                else -> "Todavía no hay series identificadas. Lanza un escaneo desde la web del servidor."
+                tab == LibraryTab.MOVIES -> "Todavía no hay películas identificadas. Lanza un escaneo con el botón de arriba."
+                else -> "Todavía no hay series identificadas. Lanza un escaneo con el botón de arriba."
             }
         )
         return
     }
     val urls = rememberMediaUrls()
     val gridState = rememberTabGridState(tab, position, onScroll, contentKey = filters)
-    val focus = rememberFocusRestore(tab, position)
+    val back = rememberFocusReturn(position.key, tab)
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(170.dp),
+        columns = GridCells.Adaptive(116.dp),
         state = gridState,
-        contentPadding = PaddingValues(start = 40.dp, end = 40.dp, bottom = 40.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        contentPadding = PaddingValues(start = ContentStart, end = ContentEnd, top = 8.dp, bottom = 40.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(items, key = { it.id }) { item ->
             val series = item.kind == LibraryKind.SERIES
-            val subtitle = if (series) {
-                listOfNotNull(
-                    item.year?.toString(),
-                    "${item.watch.episodesWatched}/${item.watch.episodesTotal} episodios"
-                ).joinToString(" · ")
+            val subtitle = if (series && item.watch.episodesTotal > 0) {
+                "${item.watch.episodesWatched} de ${item.watch.episodesTotal} vistos"
             } else item.year?.toString()
-            val isTarget = item.id == focus.key
-            PosterCard(
+            PosterTile(
                 title = item.title,
                 subtitle = subtitle,
-                imageUrl = urls.absolute(item.posterUrl),
+                imageUrl = urls.libraryImage(item.posterUrl, "w342"),
                 progress = if (item.watch.inProgress) item.watch.progress.toFloat() else null,
                 completed = item.watch.completed,
+                rating = item.rating,
                 placeholder = if (series) Icons.Outlined.Tv else Icons.Outlined.Movie,
                 onClick = { onOpen(item.id) },
-                modifier = if (isTarget) Modifier.focusRequester(focus.requester) else Modifier
+                onLongClick = { onMenu(item) },
+                onFocused = { onFocused(item) },
+                modifier = Modifier.returnFocus(back, item.id)
             )
-            focus.RequestOnce(isTarget)
         }
     }
 }
@@ -396,38 +403,36 @@ private fun FilterBar(state: LibraryState, onChange: (ItemFilters) -> Unit) {
     val filters = state.itemFilters
     var open by remember { mutableStateOf<FilterPicker?>(null) }
     Row(
-        modifier = Modifier.padding(start = 40.dp, end = 40.dp, bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(start = ContentStart, end = ContentEnd, top = 2.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        TabChip(label = filters.sort.label, selected = false, opens = true, onClick = { open = FilterPicker.SORT })
         TabChip(
-            label = "Orden: ${filters.sort.label}",
-            selected = false,
-            onClick = { open = FilterPicker.SORT }
-        )
-        TabChip(
-            label = "Mostrar: ${filters.watch.label}",
+            label = if (filters.watch == WatchFilter.ALL) "Vistas y sin ver" else filters.watch.label,
             selected = filters.watch != WatchFilter.ALL,
+            opens = true,
             onClick = { open = FilterPicker.WATCH }
         )
         if (state.genres.isNotEmpty() || filters.genre != null) {
             TabChip(
                 label = filters.genre ?: "Todos los géneros",
                 selected = filters.genre != null,
+                opens = true,
                 onClick = { open = FilterPicker.GENRE }
             )
         }
         if (filters.narrowed) {
-            TabChip(
-                label = "Quitar filtros",
-                selected = false,
-                onClick = { onChange(filters.copy(watch = WatchFilter.ALL, genre = null)) }
-            )
+            IconPill(Icons.Outlined.FilterAltOff, "Quitar filtros", {
+                onChange(filters.copy(watch = WatchFilter.ALL, genre = null))
+            })
         }
         Text(
             text = state.visibleItems.size.let { if (it == 1) "1 título" else "$it títulos" },
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = OnSurfaceMuted,
             modifier = Modifier.padding(start = 8.dp)
         )
     }
@@ -465,7 +470,7 @@ private fun ReviewList(
     search: String,
     position: TabPosition,
     onScroll: (Int, Int) -> Unit,
-    onIdentify: (LibraryFileDto, IdentifyTarget) -> Unit
+    onIdentify: (LibraryFileDto) -> Unit
 ) {
     if (files.isEmpty()) {
         EmptyState(
@@ -475,32 +480,14 @@ private fun ReviewList(
         return
     }
     val listState = rememberTabListState(LibraryTab.REVIEW, position, onScroll)
-    val focus = rememberFocusRestore(LibraryTab.REVIEW, position)
+    val back = rememberFocusReturn(position.key, LibraryTab.REVIEW)
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(start = 40.dp, end = 40.dp, bottom = 40.dp),
+        contentPadding = PaddingValues(start = ContentStart, end = ContentEnd, top = 6.dp, bottom = 40.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(files, key = { fileKey(it) }) { file ->
-            val isTarget = fileKey(file) == focus.key
-            ReviewRow(
-                file = file,
-                modifier = if (isTarget) Modifier.focusRequester(focus.requester) else Modifier
-            ) {
-                onIdentify(
-                    file,
-                    IdentifyTarget(
-                        channelId = file.channelId,
-                        fileId = file.fileId,
-                        itemId = file.itemId,
-                        kind = file.item?.kind ?: file.kind ?: if (file.parsed.isSeries) LibraryKind.SERIES else LibraryKind.MOVIE,
-                        query = file.item?.title ?: file.parsed.title.ifBlank { file.fileName },
-                        season = file.season ?: file.parsed.season,
-                        episode = file.episode ?: file.parsed.episode
-                    )
-                )
-            }
-            focus.RequestOnce(isTarget)
+            ReviewRow(file = file, modifier = Modifier.returnFocus(back, fileKey(file))) { onIdentify(file) }
         }
     }
 }
@@ -510,15 +497,12 @@ private fun ReviewRow(file: LibraryFileDto, modifier: Modifier = Modifier, onCli
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().tapClick(onClick),
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(10.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary
-        )
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(14.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.015f),
+        border = listRowBorder(),
+        colors = listRowColors()
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = file.fileName,
                 style = MaterialTheme.typography.titleSmall,
@@ -534,12 +518,7 @@ private fun ReviewRow(file: LibraryFileDto, modifier: Modifier = Modifier, onCli
                 }
                 file.item?.let { append(" · Propuesto: ").append(it.title); it.year?.let { y -> append(" ($y)") } }
             }
-            Text(
-                text = guess,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(text = guess, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

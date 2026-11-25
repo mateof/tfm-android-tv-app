@@ -83,7 +83,7 @@ fun CastSheet(vm: CastViewModel, onOpenPanel: () -> Unit) {
             Modifier
                 .widthIn(max = 720.dp)
                 .fillMaxWidth(0.9f)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
                 .padding(28.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

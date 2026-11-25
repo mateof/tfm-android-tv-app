@@ -200,6 +200,9 @@ data class LibraryScanStateDto(
     val channelsScanned: Int = 0,
     val currentChannel: String? = null,
     val filesSeen: Int = 0,
+    /** 0 until the indexes are compared; from then on this is the progress of the scan. */
+    val filesToProcess: Int = 0,
+    val filesProcessed: Int = 0,
     val filesNew: Int = 0,
     val matched: Int = 0,
     val review: Int = 0,

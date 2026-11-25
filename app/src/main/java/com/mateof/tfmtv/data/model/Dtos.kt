@@ -18,6 +18,13 @@ data class SystemInfoDto(
     val requiresApiKey: Boolean = false
 )
 
+/** `GET /api/mobile/capabilities`. */
+@Serializable
+data class CapabilitiesDto(
+    val serverVersion: String? = null,
+    val features: List<String> = emptyList()
+)
+
 @Serializable
 data class TelegramUserDto(
     val id: Long = 0,
@@ -83,7 +90,16 @@ data class ChannelMessageDto(
     val fileName: String? = null,
     val fileSize: Long? = null,
     val mimeType: String? = null,
-    val from: String? = null
+    val from: String? = null,
+    /** Seconds, for videos and audio. */
+    val duration: Int? = null
+)
+
+@Serializable
+data class ChatSearchDto(
+    val items: List<ChannelMessageDto> = emptyList(),
+    val total: Int = 0,
+    val nextOffsetId: Long? = null
 )
 
 // ---------------------------------------------------------------------------
@@ -107,7 +123,23 @@ data class ApiFileDto(
     val messageId: Long? = null,
     val isSplit: Boolean = false,
     val streamUrl: String? = null,
-    val downloadUrl: String? = null
+    val downloadUrl: String? = null,
+    /** Small JPEG preview embedded in the Telegram message; null when split or on an old server. */
+    val thumbnailUrl: String? = null
+)
+
+/** `GET /api/v1/search`. */
+@Serializable
+data class GlobalSearchDto(
+    val channels: List<SearchChannelGroupDto> = emptyList(),
+    val truncated: Boolean = false
+)
+
+@Serializable
+data class SearchChannelGroupDto(
+    val channelId: String = "",
+    val channelName: String = "",
+    val files: List<ApiFileDto> = emptyList()
 )
 
 @Serializable
@@ -144,11 +176,35 @@ data class FolderContentsDto(
 data class ChannelRefreshRequest(val force: Boolean = false)
 
 @Serializable
+data class ChannelRefreshProgressDto(
+    val running: Boolean = false,
+    /** `searching`, `indexing` or `done`. */
+    val phase: String? = null,
+    val filters: List<RefreshFilterDto> = emptyList(),
+    val newFiles: Int = 0,
+    val indexed: Int = 0,
+    val cancelRequested: Boolean = false
+)
+
+@Serializable
+data class RefreshFilterDto(
+    val type: String = "",
+    val fetched: Int = 0,
+    val total: Int? = null,
+    val done: Boolean = false,
+    val pending: Boolean = false,
+    /** When Telegram lets it go on, while it is holding the search back (FLOOD_WAIT). */
+    val waitUntil: String? = null
+)
+
+@Serializable
 data class ChannelRefreshResultDto(
     val channelId: String = "",
     val startedAt: String? = null,
     val finishedAt: String? = null,
     val failed: Boolean = false,
+    val canceled: Boolean = false,
+    val error: String? = null,
     val photos: Int = 0,
     val videos: Int = 0,
     val audios: Int = 0,
