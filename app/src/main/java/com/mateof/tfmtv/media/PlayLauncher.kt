@@ -12,6 +12,7 @@ sealed interface PlayEvent {
         val url: String,
         val title: String,
         val channelId: Long,
+        /** Blank for an attachment that is not indexed: there is nowhere to keep its progress. */
         val fileId: String,
         val startMs: Long
     ) : PlayEvent
@@ -37,10 +38,13 @@ class PlayLauncher @Inject constructor(
      * saved one (and resumes automatically when there is one worth resuming).
      */
     suspend fun resolve(file: ApiFileDto, channelId: Long, title: String, startMs: Long?): PlayEvent {
-        val url = mediaUrls.withKey(file.streamUrl ?: file.downloadUrl)
+        val url = internalUrl(file)
             ?: return PlayEvent.Failed("Este vídeo no tiene URL de reproducción")
         if (players.launchExternal(url, title)) return PlayEvent.Handed
         val start = startMs ?: watch.resumePosition(channelId, file.id)
         return PlayEvent.Internal(url, title, channelId, file.id, start)
     }
+
+    /** The URL of a file for the built-in player, whatever the player setting says. */
+    fun internalUrl(file: ApiFileDto): String? = mediaUrls.withKey(file.streamUrl ?: file.downloadUrl)
 }

@@ -1,6 +1,8 @@
 package com.mateof.tfmtv.data.repo
 
+import com.mateof.tfmtv.core.Paged
 import com.mateof.tfmtv.core.apiCall
+import com.mateof.tfmtv.core.apiCallPaged
 import com.mateof.tfmtv.data.api.ChannelsApi
 import com.mateof.tfmtv.data.api.FilesApi
 import com.mateof.tfmtv.data.model.ApiFileDto
@@ -11,10 +13,19 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** A page of the messages with a video. [next] goes back into the next call; null at the end. */
+data class MessagePage(
+    val items: List<ChannelMessageDto>,
+    val next: Long?,
+    /** In the whole chat, as Telegram reports it; null on an old server. */
+    val total: Int? = null
+)
+
 @Singleton
 class VideoRepository @Inject constructor(
     private val files: FilesApi,
-    private val channels: ChannelsApi
+    private val channels: ChannelsApi,
+    private val features: ServerFeatures
 ) {
     /** One folder level: subfolders plus the videos directly inside it. */
     suspend fun browse(
@@ -24,8 +35,8 @@ class VideoRepository @Inject constructor(
         sortBy: String = "name",
         sortDescending: Boolean = false,
         page: Int = 1
-    ): FolderContentsDto = withContext(Dispatchers.IO) {
-        apiCall {
+    ): Paged<FolderContentsDto> = withContext(Dispatchers.IO) {
+        apiCallPaged {
             files.browse(
                 channelId = channelId.toString(),
                 path = path,
@@ -40,29 +51,31 @@ class VideoRepository @Inject constructor(
     }
 
     /**
-     * Every video in the channel, newest first. The server search is recursive
-     * but needs a non-empty term, and it matches with `contains`, so a dot hits
-     * anything carrying a file extension.
+     * The videos of the channel, or of the folder [path] and what is below it.
+     * The server search is recursive but needs a non-empty term, and it matches
+     * with `contains`, so a dot hits anything carrying a file extension.
      */
-    suspend fun allVideos(
+    suspend fun videos(
         channelId: Long,
+        text: String = "",
+        path: String? = null,
         sortBy: String = "date",
         sortDescending: Boolean = true,
         page: Int = 1
-    ): List<ApiFileDto> =
-        withContext(Dispatchers.IO) {
-            apiCall {
-                files.search(
-                    channelId = channelId.toString(),
-                    q = ".",
-                    filter = "video",
-                    sortBy = sortBy,
-                    sortDescending = sortDescending,
-                    page = page,
-                    pageSize = PAGE_SIZE
-                )
-            }
+    ): Paged<List<ApiFileDto>> = withContext(Dispatchers.IO) {
+        apiCallPaged {
+            files.search(
+                channelId = channelId.toString(),
+                q = text.trim().ifBlank { "." },
+                path = path,
+                filter = "video",
+                sortBy = sortBy,
+                sortDescending = sortDescending,
+                page = page,
+                pageSize = PAGE_SIZE
+            )
         }
+    }
 
     /**
      * Video files keyed by the message they came from, so the messages list can
@@ -86,23 +99,48 @@ class VideoRepository @Inject constructor(
                 .toMap()
         }
 
-    /** Channel messages that carry a video, newest first. */
-    suspend fun videoMessages(channelId: Long, offset: Int = 0): List<ChannelMessageDto> =
+    /**
+     * Messages that carry a video, newest first. Telegram does the search when
+     * the server can ask for it; an old server is read page by page instead,
+     * and the text is then looked for in each page.
+     */
+    suspend fun videoMessages(channelId: Long, text: String = "", from: Long = 0): MessagePage =
         withContext(Dispatchers.IO) {
-            apiCall {
-                channels.messages(
-                    id = channelId.toString(),
-                    limit = MESSAGE_PAGE,
-                    offset = offset,
-                    onlyMedia = true
+            val query = text.trim()
+            if (features.has(Feature.MESSAGES_BROWSE)) {
+                val found = apiCall {
+                    channels.searchMessages(
+                        id = channelId.toString(),
+                        kind = "videos",
+                        q = query.ifBlank { null },
+                        offsetId = from
+                    )
+                }
+                MessagePage(found.items, found.nextOffsetId, found.total)
+            } else {
+                val page = apiCall {
+                    channels.messages(
+                        id = channelId.toString(),
+                        limit = MESSAGE_PAGE,
+                        offset = from.toInt(),
+                        onlyMedia = true
+                    )
+                }
+                MessagePage(
+                    items = page.filter {
+                        it.mediaType.equals("video", ignoreCase = true) &&
+                            (query.isBlank() || it.fileName.orEmpty().contains(query, ignoreCase = true))
+                    },
+                    // `onlyMedia` drops messages after paging, so a short page is not the end.
+                    next = if (page.isEmpty()) null else from + MESSAGE_PAGE
                 )
-            }.filter { it.mediaType.equals("video", ignoreCase = true) }
+            }
         }
 
     /**
-     * Finds the indexed file backing a message. Streaming needs a file id, and
-     * messages only carry a name, so the name is searched and confirmed against
-     * the message id when the channel has been indexed more than once.
+     * Finds the indexed file backing a message. Messages only carry a name, so
+     * the name is searched and confirmed against the message id when the
+     * channel has been indexed more than once.
      */
     suspend fun resolveMessage(channelId: Long, message: ChannelMessageDto): ApiFileDto? =
         withContext(Dispatchers.IO) {
@@ -123,7 +161,7 @@ class VideoRepository @Inject constructor(
         }
 
     private companion object {
-        const val PAGE_SIZE = 200
+        const val PAGE_SIZE = 100
         const val INDEX_SIZE = 500
         const val MESSAGE_PAGE = 100
     }

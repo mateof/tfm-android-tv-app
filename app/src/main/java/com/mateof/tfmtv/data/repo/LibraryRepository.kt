@@ -15,6 +15,7 @@ import com.mateof.tfmtv.data.model.LibraryScanStateDto
 import com.mateof.tfmtv.data.model.LibraryStatsDto
 import com.mateof.tfmtv.data.model.MatchFileRequest
 import com.mateof.tfmtv.data.model.ProviderCandidateDto
+import com.mateof.tfmtv.data.prefs.ServerPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -39,8 +40,12 @@ object LibraryErrors {
 
 @Singleton
 class LibraryRepository @Inject constructor(
-    private val api: LibraryApi
+    private val api: LibraryApi,
+    private val prefs: ServerPreferences
 ) {
+    /** The library leaves out what lives in hidden channels only, unless the setting shows them. */
+    private val hidden: Boolean get() = prefs.showHiddenChannels.value
+
     suspend fun stats(): LibraryStatsDto = withContext(Dispatchers.IO) { apiCall { api.stats() } }
 
     /** Every item of one kind, page by page, like the channel list. */
@@ -48,7 +53,7 @@ class LibraryRepository @Inject constructor(
         val out = mutableListOf<LibraryItemDto>()
         var page = 1
         while (page <= MAX_PAGES) {
-            val paged = apiCallPaged { api.items(kind = kind, page = page, pageSize = PAGE_SIZE) }
+            val paged = apiCallPaged { api.items(kind = kind, includeHidden = hidden, page = page, pageSize = PAGE_SIZE) }
             out += paged.items
             if (paged.page?.hasNext != true) break
             page++
@@ -56,12 +61,41 @@ class LibraryRepository @Inject constructor(
         out
     }
 
+    /** The first titles in the order of the server: best rated, last played… */
+    suspend fun top(kind: String, sortBy: String, limit: Int): List<LibraryItemDto> = withContext(Dispatchers.IO) {
+        apiCall { api.items(kind = kind, includeHidden = hidden, sortBy = sortBy, sortDescending = true, pageSize = limit) }
+    }
+
+    suspend fun recent(kind: String, limit: Int): List<LibraryItemDto> = withContext(Dispatchers.IO) {
+        apiCall { api.recent(kind = kind, limit = limit, includeHidden = hidden) }
+    }
+
+    suspend fun search(text: String, limit: Int = 40): List<LibraryItemDto> = withContext(Dispatchers.IO) {
+        apiCall { api.items(search = text, includeHidden = hidden, sortBy = "title", pageSize = limit) }
+    }
+
+    suspend fun history(): List<LibraryFileDto> = withContext(Dispatchers.IO) {
+        apiCall { api.history(includeHidden = hidden) }
+    }
+
+    suspend fun file(channelId: Long, fileId: String): LibraryFileDto? = withContext(Dispatchers.IO) {
+        apiCallNullable { api.file(channelId, fileId) }
+    }
+
+    suspend fun refreshItem(id: String) {
+        withContext(Dispatchers.IO) { apiCallNullable { api.refreshItem(id) } }
+    }
+
+    suspend fun cancelScan() {
+        withContext(Dispatchers.IO) { apiCallNullable { api.cancelScan() } }
+    }
+
     suspend fun item(id: String): LibraryItemDetailDto = withContext(Dispatchers.IO) {
         apiCall { api.item(id) }
     }
 
     suspend fun continueWatching(): List<LibraryFileDto> = withContext(Dispatchers.IO) {
-        apiCall { api.continueWatching() }
+        apiCall { api.continueWatching(includeHidden = hidden) }
     }
 
     suspend fun files(status: String): List<LibraryFileDto> = withContext(Dispatchers.IO) {
@@ -91,10 +125,11 @@ class LibraryRepository @Inject constructor(
     suspend fun identifyItem(id: String, body: IdentifyItemRequest): LibraryItemDetailDto? =
         withContext(Dispatchers.IO) { apiCallNullable { api.identifyItem(id, body) } }
 
-    suspend fun setItemWatched(id: String, watched: Boolean): LibraryItemDetailDto? =
+    /** [season] null is the whole item. */
+    suspend fun setItemWatched(id: String, watched: Boolean, season: Int? = null): LibraryItemDetailDto? =
         withContext(Dispatchers.IO) {
             apiCallNullable {
-                if (watched) api.markItemWatched(id, ItemWatchedRequest()) else api.markItemUnwatched(id)
+                if (watched) api.markItemWatched(id, ItemWatchedRequest(season)) else api.markItemUnwatched(id, season)
             }
         }
 

@@ -13,25 +13,44 @@
 Android TV / Fire TV client for Telegram File Manager. Browse your channels on the big
 screen and play the videos stored in them.
 
+<p align="center">
+  <img src="docs/screenshots/home.jpg" width="49%" alt="Home">
+  <img src="docs/screenshots/series.jpg" width="49%" alt="A series">
+  <img src="docs/screenshots/library.jpg" width="49%" alt="Library">
+  <img src="docs/screenshots/channel.jpg" width="49%" alt="Messages of a channel">
+  <img src="docs/screenshots/player.jpg" width="49%" alt="Player">
+  <img src="docs/screenshots/search.jpg" width="49%" alt="Search">
+</p>
+
 ## Features
 
-- **Channels split by section**: mine, shared, favourites, Telegram chat folders, and all.
-- **Folder navigation** inside each channel, showing only videos.
-- **All videos** view: every video in the channel, newest first.
-- **Messages** view: channel messages that carry a video, newest first, with previews.
+- **Home**: continue watching, next episode, latest movies and series, best rated not
+  seen yet and favourite channels, with the backdrop and synopsis of whatever has the focus.
+- **Search** in the library, in the files of every channel and in the channel names at
+  once, with the last searches at hand.
+- **Channels split by section**: favourites, mine, shared, Telegram chat folders and all.
+  A long press adds a channel to the favourites or hides it.
+- **Folder navigation**, **all videos** and **messages** of each channel, with the preview
+  Telegram keeps in each message, the length of the videos, search, order and endless
+  scrolling. Messages that are not indexed play straight from Telegram.
 - **Library**: movies and series identified by the server (TMDB / OMDb) with posters,
-  synopsis, seasons and episodes; *continue watching*, *next up*, watched marks and a
-  screen to fix a wrong identification. Playback progress is stored on the server, so the
-  built-in player resumes where you left off.
-- **Playback choice**: built-in player (ExoPlayer + FFmpeg software decoders via NextLib),
-  VLC or any other installed player, the system default, or ask every time.
-- **In-app updates**: settings can check GitHub Releases, download the APK and hand it to
-  the package installer.
+  synopsis, seasons and episodes; *continue watching*, *next up*, history, watched marks
+  (per file, per season or per title) and a screen to fix a wrong identification.
+  Playback progress is stored on the server, so every device resumes where you left off.
+- **Player**: own controls for the remote (seek bar that speeds up while held, ±10/30 s,
+  audio track, subtitles, speed, picture), time left and when it ends, the **next episode**
+  offered before the end and played on its own, and the chosen languages remembered.
+  ExoPlayer + FFmpeg software decoders (NextLib) for MKV/AVI with AC3/DTS/Xvid. VLC or any
+  other installed player can be used instead.
+- **Send to a TV over DLNA**, through this device when the TV cannot reach the server.
+- **Looks**: five accent colours, and effects (glow, backdrops, transitions) that switch
+  themselves off on devices short of memory.
+- **In-app updates** from GitHub Releases.
 - D-pad first UI built with Compose for TV, also usable by touch.
 
-Video cards show a generic icon rather than a frame of the video: the server exposes no
-thumbnail endpoint, and extracting a frame from the stream made it download the whole
-file.
+Older servers keep working: what needs a newer one (global search, previews, messages not
+indexed, refresh progress) is asked for with `GET /api/mobile/capabilities` and left out
+when the server does not have it.
 
 ## Requirements
 
@@ -42,6 +61,12 @@ file.
 
 On first launch enter the server address (`192.168.1.10:5257` is enough, `http://` is
 added automatically) and the API key if the server requires one.
+
+## Testing without a server
+
+`tools/fake_tfm_server.py` serves a made-up library, channels and messages with invented
+artwork (Pillow), and streams `tools/media/movie.mkv` as every video. The emulator sees the
+PC at `10.0.2.2`. `--old` plays an old server, `--broken` makes every video fail.
 
 ## Build
 

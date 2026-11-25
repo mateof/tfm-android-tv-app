@@ -92,7 +92,8 @@ private fun ApiEnvelope<*>.toException(status: Int?) = ApiException(
 /** Human friendly message for any throwable coming from the data layer. */
 fun Throwable.userMessage(): String = when (this) {
     is ApiException -> when (code) {
-        "unauthorized" -> "API key inválida o ausente"
+        "unauthorized" ->
+            "El servidor no acepta la API key. Si la web tiene contraseña, la app necesita la clave del servidor (Ajustes → Servidor)."
         "not_logged_in" -> "Sesión de Telegram no iniciada"
         "setup_required" -> "El servidor necesita completar el asistente de configuración"
         else -> detail?.takeIf { it.isNotBlank() }?.let { "$message — $it" } ?: message

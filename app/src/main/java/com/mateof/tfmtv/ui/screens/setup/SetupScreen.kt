@@ -32,9 +32,15 @@ import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.ui.components.ClickToEdit
 import com.mateof.tfmtv.ui.components.clickToEditColors
-import com.mateof.tfmtv.ui.components.tapClick
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
+import com.mateof.tfmtv.ui.components.Logo
+import com.mateof.tfmtv.ui.components.PillButton
+import com.mateof.tfmtv.ui.theme.Surface
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.ui.draw.clip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -112,15 +118,24 @@ fun SetupScreen(onDone: () -> Unit) {
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
-            modifier = Modifier.width(640.dp).padding(32.dp),
+            modifier = Modifier
+                .width(560.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Surface.copy(alpha = 0.85f))
+                .padding(horizontal = 40.dp, vertical = 34.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("TFM TV", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "Conecta con tu servidor de Telegram File Manager.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Logo(52)
+                Column {
+                    Text("TFM TV", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        "Conecta con tu servidor de Telegram File Manager.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             ClickToEdit(Modifier.fillMaxWidth().focusRequester(firstField)) { fieldModifier, _ ->
                 OutlinedTextField(
@@ -128,6 +143,7 @@ fun SetupScreen(onDone: () -> Unit) {
                     onValueChange = vm::setUrl,
                     label = { androidx.compose.material3.Text("Servidor (ej. 192.168.1.10:5257)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Uri,
                         imeAction = ImeAction.Next
@@ -142,8 +158,9 @@ fun SetupScreen(onDone: () -> Unit) {
                 OutlinedTextField(
                     value = state.apiKey,
                     onValueChange = vm::setKey,
-                    label = { androidx.compose.material3.Text("API key (opcional)") },
+                    label = { androidx.compose.material3.Text("API key (si el servidor la pide)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { done() }),
                     colors = clickToEditColors(),
@@ -159,19 +176,13 @@ fun SetupScreen(onDone: () -> Unit) {
                 )
             }
 
-            Button(
+            PillButton(
+                label = if (state.testing) "Conectando…" else "Conectar",
+                icon = Icons.Outlined.Link,
                 onClick = vm::connect,
                 enabled = !state.testing,
-                colors = ButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    focusedContainerColor = MaterialTheme.colorScheme.primary,
-                    focusedContentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                modifier = Modifier.fillMaxWidth().tapClick(vm::connect)
-            ) {
-                Text(if (state.testing) "Conectando…" else "Conectar")
-            }
+                primary = true
+            )
         }
     }
 }

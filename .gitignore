@@ -26,3 +26,4 @@ setup-signing.ps1
 hs_err_pid*
 replay_pid*
 tools/media/
+tools/__pycache__/

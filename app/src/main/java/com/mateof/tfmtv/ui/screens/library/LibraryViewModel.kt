@@ -8,6 +8,7 @@ import com.mateof.tfmtv.data.model.LibraryFileStatus
 import com.mateof.tfmtv.data.model.LibraryItemDto
 import com.mateof.tfmtv.data.model.LibraryKind
 import com.mateof.tfmtv.data.model.LibraryScanStateDto
+import com.mateof.tfmtv.data.repo.LibraryActions
 import com.mateof.tfmtv.data.repo.LibraryErrors
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.repo.LibraryRepository
@@ -30,6 +31,7 @@ enum class LibraryTab(val label: String) {
     CONTINUE("Continuar"),
     MOVIES("Películas"),
     SERIES("Series"),
+    HISTORY("Vistos"),
     REVIEW("Revisar")
 }
 
@@ -44,16 +46,23 @@ data class LibraryState(
     val movies: List<LibraryItemDto> = emptyList(),
     val series: List<LibraryItemDto> = emptyList(),
     val reviewFiles: List<LibraryFileDto> = emptyList(),
+    val historyFiles: List<LibraryFileDto> = emptyList(),
     val loaded: Set<LibraryTab> = emptySet(),
     val movieFilters: ItemFilters = ItemFilters(),
     val seriesFilters: ItemFilters = ItemFilters(),
     val scanning: Boolean = false,
-    val scanMessage: String? = null
+    val scanMessage: String? = null,
+    /** 0..1 while the scan knows how much there is to do. */
+    val scanProgress: Float? = null,
+    val message: String? = null
 ) {
     private val query: String get() = search.trim()
 
     val visibleContinue: List<LibraryFileDto>
         get() = continueFiles.filter { query.isBlank() || it.displayTitle().contains(query, ignoreCase = true) }
+
+    val visibleHistory: List<LibraryFileDto>
+        get() = historyFiles.filter { query.isBlank() || it.displayTitle().contains(query, ignoreCase = true) }
 
     private val tabItems: List<LibraryItemDto> get() = if (tab == LibraryTab.MOVIES) movies else series
 
@@ -84,6 +93,35 @@ fun LibraryFileDto.displayTitle(): String {
         "${item.title} · T${season ?: 1} E$episode"
     } else item.title
 }
+
+/** What the identify screen needs to start from this file. */
+fun LibraryFileDto.identifyTarget() = IdentifyTarget(
+    channelId = channelId,
+    fileId = fileId,
+    itemId = itemId,
+    kind = item?.kind ?: kind ?: if (parsed.isSeries) LibraryKind.SERIES else LibraryKind.MOVIE,
+    query = item?.title ?: parsed.title.ifBlank { fileName },
+    season = season ?: parsed.season,
+    episode = episode ?: parsed.episode
+)
+
+/**
+ * A scan first reads the index of every channel and then identifies what is
+ * new; a server that does not tell them apart only reports the channels.
+ */
+fun scanText(s: LibraryScanStateDto): String = buildString {
+    if (s.filesToProcess > 0) {
+        append("Identificando ${s.filesProcessed} de ${s.filesToProcess} ficheros")
+    } else {
+        append("Leyendo los canales")
+        if (s.channelsTotal > 0) append(" (${s.channelsScanned} de ${s.channelsTotal})")
+        s.currentChannel?.takeIf { it.isNotBlank() }?.let { append(" · $it") }
+    }
+    if (s.filesNew > 0) append(" · ${s.filesNew} nuevos")
+}
+
+fun scanFraction(s: LibraryScanStateDto): Float? =
+    if (s.filesToProcess > 0) (s.filesProcessed / s.filesToProcess.toFloat()).coerceIn(0f, 1f) else null
 
 enum class LibrarySort(val label: String) {
     ADDED("Últimas añadidas"),
@@ -146,6 +184,7 @@ data class TabPosition(val index: Int = 0, val offset: Int = 0, val key: String?
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: LibraryRepository,
+    private val actions: LibraryActions,
     private val launcher: PlayLauncher,
     private val prefs: ServerPreferences
 ) : ViewModel() {
@@ -239,6 +278,10 @@ class LibraryViewModel @Inject constructor(
                         val list = repo.items(LibraryKind.SERIES)
                         _state.update { it.copy(series = list) }
                     }
+                    LibraryTab.HISTORY -> {
+                        val list = repo.history()
+                        _state.update { it.copy(historyFiles = list) }
+                    }
                     LibraryTab.REVIEW -> {
                         val review = repo.files(LibraryFileStatus.REVIEW)
                         val unmatched = repo.files(LibraryFileStatus.UNMATCHED)
@@ -265,8 +308,11 @@ class LibraryViewModel @Inject constructor(
      * them. Progress is polled; the scan itself keeps going if the screen is left.
      */
     fun scan() {
-        if (_state.value.scanning) return
-        _state.update { it.copy(scanning = true, scanMessage = "Escaneando la biblioteca…") }
+        if (_state.value.scanning) {
+            cancelScan()
+            return
+        }
+        _state.update { it.copy(scanning = true, scanProgress = null, scanMessage = "Escaneando la biblioteca…") }
         viewModelScope.launch {
             val outcome = runCatching {
                 if (!repo.startScan()) {
@@ -274,7 +320,7 @@ class LibraryViewModel @Inject constructor(
                 }
                 var last = repo.scanState()
                 while (last?.running == true) {
-                    _state.update { it.copy(scanMessage = progressText(last!!)) }
+                    _state.update { it.copy(scanMessage = scanText(last!!), scanProgress = scanFraction(last!!)) }
                     delay(SCAN_POLL_MS)
                     last = repo.scanState()
                 }
@@ -284,30 +330,52 @@ class LibraryViewModel @Inject constructor(
                 onSuccess = { s ->
                     when {
                         s == null -> "Escaneo terminado."
-                        s.error != null -> "El escaneo terminó con un error: ${s.error}"
                         s.cancelled -> "Escaneo cancelado. ${s.filesNew} ficheros nuevos."
+                        // Not always the end of it: a provider out of quota is also told here.
+                        s.error != null -> "Escaneo terminado con avisos: ${s.error}"
                         else -> "Escaneo terminado: ${s.filesNew} ficheros nuevos, ${s.matched} identificados, ${s.review + s.unmatched} por revisar."
                     }
                 },
                 onFailure = { e -> LibraryErrors.unavailableMessage(e) ?: "No se pudo escanear: ${e.userMessage()}" }
             )
-            _state.update { it.copy(scanning = false, scanMessage = text, loaded = emptySet()) }
+            _state.update { it.copy(scanning = false, scanMessage = null, scanProgress = null, message = text, loaded = emptySet()) }
             if (outcome.isSuccess) refresh()
         }
     }
 
-    private fun progressText(s: LibraryScanStateDto): String = buildString {
-        append("Escaneando")
-        if (s.channelsTotal > 0) append(" ${s.channelsScanned}/${s.channelsTotal} canales")
-        s.currentChannel?.takeIf { it.isNotBlank() }?.let { append(" · $it") }
-        append(" · ${s.filesNew} nuevos")
+    private fun cancelScan() {
+        _state.update { it.copy(scanMessage = "Cancelando el escaneo…") }
+        viewModelScope.launch {
+            runCatching { repo.cancelScan() }
+                .onFailure { e -> _state.update { it.copy(message = "No se pudo cancelar: ${e.userMessage()}") } }
+        }
     }
 
-    /** Continue watching: resumes where the server says it stopped. */
-    fun play(file: LibraryFileDto) {
+    fun setWatched(file: LibraryFileDto, watched: Boolean) = change { actions.setWatched(file, watched) }
+    fun setWatched(item: LibraryItemDto, watched: Boolean) = change { actions.setWatched(item, watched) }
+    fun forget(file: LibraryFileDto) = change { actions.forget(file) }
+
+    private fun change(block: suspend () -> Result<String>) {
         viewModelScope.launch {
-            val start = file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L
-            _events.send(launcher.resolve(file.file, file.channelId, file.displayTitle(), start))
+            val result = block()
+            _state.update {
+                it.copy(
+                    message = result.getOrElse { e -> e.message },
+                    // The other tabs show it too, but there is no need to empty them.
+                    loaded = if (result.isSuccess) setOf(it.tab) else it.loaded
+                )
+            }
+            if (result.isSuccess) refresh()
+        }
+    }
+
+    fun say(text: String) = _state.update { it.copy(message = text) }
+    fun messageShown() = _state.update { it.copy(message = null) }
+
+    /** Continue watching: resumes where the server says it stopped. */
+    fun play(file: LibraryFileDto, startMs: Long = file.watch?.takeIf { it.inProgress }?.positionMs ?: 0L) {
+        viewModelScope.launch {
+            _events.send(launcher.resolve(file.file, file.channelId, file.displayTitle(), startMs))
         }
     }
 

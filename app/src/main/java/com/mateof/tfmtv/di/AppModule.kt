@@ -4,6 +4,7 @@ import com.mateof.tfmtv.data.api.AuthApi
 import com.mateof.tfmtv.data.api.ChannelsApi
 import com.mateof.tfmtv.data.api.FilesApi
 import com.mateof.tfmtv.data.api.LibraryApi
+import com.mateof.tfmtv.data.api.SearchApi
 import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.net.ApiKeyInterceptor
 import com.mateof.tfmtv.data.net.HostSelectionInterceptor
@@ -59,5 +60,6 @@ object AppModule {
     @Provides @Singleton fun provideAuthApi(r: Retrofit): AuthApi = r.create(AuthApi::class.java)
     @Provides @Singleton fun provideChannelsApi(r: Retrofit): ChannelsApi = r.create(ChannelsApi::class.java)
     @Provides @Singleton fun provideFilesApi(r: Retrofit): FilesApi = r.create(FilesApi::class.java)
+    @Provides @Singleton fun provideSearchApi(r: Retrofit): SearchApi = r.create(SearchApi::class.java)
     @Provides @Singleton fun provideLibraryApi(r: Retrofit): LibraryApi = r.create(LibraryApi::class.java)
 }

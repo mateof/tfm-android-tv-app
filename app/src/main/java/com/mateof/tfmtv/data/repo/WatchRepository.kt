@@ -19,6 +19,7 @@ class WatchRepository @Inject constructor(
     private val api: LibraryApi
 ) {
     suspend fun get(channelId: Long, fileId: String): WatchStateDto? = withContext(Dispatchers.IO) {
+        if (fileId.isBlank()) return@withContext null
         runCatching { apiCallNullable { api.watch(channelId, fileId) } }
             .onFailure { Log.w(TAG, "Could not read progress of $channelId/$fileId: ${it.message}") }
             .getOrNull()
@@ -33,6 +34,8 @@ class WatchRepository @Inject constructor(
     /** False when the server did not take it, so the player can say so once. */
     suspend fun save(channelId: Long, fileId: String, positionMs: Long, durationMs: Long, completed: Boolean? = null): Boolean =
         withContext(Dispatchers.IO) {
+            // An attachment that is not indexed has no progress to keep.
+            if (fileId.isBlank()) return@withContext true
             runCatching {
                 apiCallNullable {
                     api.updateWatch(channelId, fileId, WatchUpdateRequest(positionMs, durationMs, completed))
@@ -40,6 +43,17 @@ class WatchRepository @Inject constructor(
             }.onFailure { Log.w(TAG, "Could not save progress of $channelId/$fileId: ${it.message}") }
                 .isSuccess
         }
+
+    /** These two are asked for by the user, so they do throw. */
+    suspend fun setWatched(channelId: Long, fileId: String, watched: Boolean) {
+        withContext(Dispatchers.IO) {
+            apiCallNullable { if (watched) api.markWatched(channelId, fileId) else api.markUnwatched(channelId, fileId) }
+        }
+    }
+
+    suspend fun forget(channelId: Long, fileId: String) {
+        withContext(Dispatchers.IO) { apiCallNullable { api.deleteWatch(channelId, fileId) } }
+    }
 
     companion object {
         private const val TAG = "WatchRepository"

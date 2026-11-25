@@ -7,6 +7,7 @@ import com.mateof.tfmtv.data.model.ChannelDto
 import com.mateof.tfmtv.data.model.ChatFolderDto
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.data.repo.ChannelsRepository
+import com.mateof.tfmtv.data.repo.ServerFeatures
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,28 +18,30 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class HomeSection(val label: String) {
+    START("Inicio"),
+    SEARCH("Buscar"),
+    LIBRARY("Biblioteca"),
+    FAVORITES("Favoritos"),
     MINE("Mis canales"),
     SHARED("Compartidos"),
-    FAVORITES("Favoritos"),
     FOLDERS("Carpetas"),
     ALL("Todos"),
-    LIBRARY("Biblioteca"),
     SETTINGS("Ajustes")
 }
 
 data class HomeState(
     val loading: Boolean = true,
     val error: String? = null,
-    val section: HomeSection = HomeSection.MINE,
+    val section: HomeSection = HomeSection.START,
     val channels: List<ChannelDto> = emptyList(),
     val folders: List<ChatFolderDto> = emptyList(),
     val openFolderId: Long? = null,
     val search: String = "",
-    val showHidden: Boolean = false
+    val showHidden: Boolean = false,
+    val message: String? = null
 ) {
-    private val listed: List<ChannelDto> get() = channels.visible()
+    val listed: List<ChannelDto> = channels.visible()
     val mine: List<ChannelDto> get() = listed.filter { it.isOwner }
-    val shared: List<ChannelDto> get() = listed.filter { !it.isOwner }
     val favorites: List<ChannelDto> get() = listed.filter { it.isFavorite }
 
     fun channelCount(folder: ChatFolderDto): Int = folder.channels.visible().size
@@ -46,33 +49,39 @@ data class HomeState(
     private fun List<ChannelDto>.visible(): List<ChannelDto> =
         if (showHidden) this else filter { !it.isHidden }
 
-    val visibleChannels: List<ChannelDto>
-        get() {
-            val list = when (section) {
-                HomeSection.MINE -> mine
-                HomeSection.SHARED -> shared
-                HomeSection.FAVORITES -> favorites
-                HomeSection.ALL -> listed
-                HomeSection.FOLDERS ->
-                    folders.firstOrNull { it.id == openFolderId }?.channels?.visible().orEmpty()
-                HomeSection.LIBRARY, HomeSection.SETTINGS -> emptyList()
-            }
-            val query = search.trim()
-            return if (query.isBlank()) list
-            else list.filter { it.name.orEmpty().contains(query, ignoreCase = true) }
+    private fun channelsOf(section: HomeSection): List<ChannelDto> =
+        when (section) {
+            HomeSection.MINE -> mine
+            HomeSection.SHARED -> listed.filter { !it.isOwner }
+            HomeSection.FAVORITES -> favorites
+            HomeSection.ALL -> listed
+            HomeSection.FOLDERS -> folders.firstOrNull { it.id == openFolderId }?.channels?.visible().orEmpty()
+            else -> emptyList()
         }
+
+    /** The channels of a section that answer to the search box. */
+    fun visibleChannels(section: HomeSection): List<ChannelDto> {
+        val query = search.trim()
+        val list = channelsOf(section)
+        return if (query.isBlank()) list else list.filter { it.name.orEmpty().contains(query, ignoreCase = true) }
+    }
 }
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: ChannelsRepository,
-    private val prefs: ServerPreferences
+    private val prefs: ServerPreferences,
+    private val features: ServerFeatures
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
+    /** The channel or folder a section was left through. */
+    private val lastFocus = mutableMapOf<HomeSection, String>()
+
     init {
+        viewModelScope.launch { features.load() }
         viewModelScope.launch {
             // Reloading is needed because hidden channels only come down the wire
             // when they are asked for.
@@ -84,7 +93,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun load() {
-        _state.update { it.copy(loading = true, error = null) }
+        _state.update { it.copy(loading = it.channels.isEmpty(), error = null) }
         val includeHidden = _state.value.showHidden
         viewModelScope.launch {
             runCatching {
@@ -105,7 +114,51 @@ class HomeViewModel @Inject constructor(
     fun select(section: HomeSection) =
         _state.update { it.copy(section = section, openFolderId = null, search = "") }
 
-    fun openFolder(id: Long?) = _state.update { it.copy(openFolderId = id) }
+    fun openFolder(id: Long?) {
+        id?.let { lastFocus[HomeSection.FOLDERS] = "folder-$it" }
+        _state.update { it.copy(openFolderId = id, search = "") }
+    }
 
     fun setSearch(value: String) = _state.update { it.copy(search = value) }
+
+    fun saveFocus(key: String) {
+        lastFocus[_state.value.section] = key
+    }
+
+    fun focusOf(section: HomeSection): String? = lastFocus[section]
+
+    fun toggleFavorite(channel: ChannelDto) = change(
+        channel,
+        { it.copy(isFavorite = !channel.isFavorite) },
+        if (channel.isFavorite) "Quitado de favoritos" else "Añadido a favoritos"
+    ) { repo.setFavorite(channel.id, !channel.isFavorite) }
+
+    fun toggleHidden(channel: ChannelDto) = change(
+        channel,
+        { it.copy(isHidden = !channel.isHidden) },
+        if (channel.isHidden) "El canal ya no está oculto" else "Canal oculto. Se vuelve a ver con Ajustes → Canales"
+    ) { repo.setHidden(channel.id, !channel.isHidden) }
+
+    /** Shown at once and put back if the server does not take it. */
+    private fun change(channel: ChannelDto, edit: (ChannelDto) -> ChannelDto, done: String, call: suspend () -> Unit) {
+        replace(channel.id, edit)
+        viewModelScope.launch {
+            runCatching { call() }
+                .onSuccess { _state.update { it.copy(message = done) } }
+                .onFailure { e ->
+                    replace(channel.id) { channel }
+                    _state.update { it.copy(message = "No se pudo: ${e.userMessage()}") }
+                }
+        }
+    }
+
+    private fun replace(id: Long, edit: (ChannelDto) -> ChannelDto) = _state.update { s ->
+        fun List<ChannelDto>.edited() = map { if (it.id == id) edit(it) else it }
+        s.copy(
+            channels = s.channels.edited(),
+            folders = s.folders.map { it.copy(channels = it.channels.edited()) }
+        )
+    }
+
+    fun messageShown() = _state.update { it.copy(message = null) }
 }

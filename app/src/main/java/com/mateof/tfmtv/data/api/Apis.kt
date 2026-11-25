@@ -3,12 +3,16 @@ package com.mateof.tfmtv.data.api
 import com.mateof.tfmtv.core.ApiEnvelope
 import com.mateof.tfmtv.data.model.ApiFileDto
 import com.mateof.tfmtv.data.model.AuthStatusDto
+import com.mateof.tfmtv.data.model.CapabilitiesDto
 import com.mateof.tfmtv.data.model.ChannelDto
+import com.mateof.tfmtv.data.model.ChannelRefreshProgressDto
 import com.mateof.tfmtv.data.model.ChannelRefreshRequest
 import com.mateof.tfmtv.data.model.ChannelRefreshResultDto
 import com.mateof.tfmtv.data.model.ChannelFoldersDto
 import com.mateof.tfmtv.data.model.ChannelMessageDto
+import com.mateof.tfmtv.data.model.ChatSearchDto
 import com.mateof.tfmtv.data.model.FolderContentsDto
+import com.mateof.tfmtv.data.model.GlobalSearchDto
 import com.mateof.tfmtv.data.model.SystemInfoDto
 import com.mateof.tfmtv.data.model.IdentifyItemRequest
 import com.mateof.tfmtv.data.model.ItemWatchedRequest
@@ -37,6 +41,21 @@ interface SystemApi {
 
     @GET("api/v1/system/info")
     suspend fun info(): ApiEnvelope<SystemInfoDto>
+
+    /** Optional features of the server; a 404 is a server too old to have any. */
+    @GET("api/mobile/capabilities")
+    suspend fun capabilities(): ApiEnvelope<CapabilitiesDto>
+}
+
+interface SearchApi {
+    /** Files by name in every indexed channel (`search.v1`). */
+    @GET("api/v1/search")
+    suspend fun search(
+        @Query("q") q: String,
+        @Query("filter") filter: String = "video",
+        @Query("scope") scope: String = "channels",
+        @Query("limit") limit: Int = 100
+    ): ApiEnvelope<GlobalSearchDto>
 }
 
 interface AuthApi {
@@ -72,12 +91,44 @@ interface ChannelsApi {
         @Query("onlyMedia") onlyMedia: Boolean = true
     ): ApiEnvelope<List<ChannelMessageDto>>
 
+    /**
+     * Searches the whole chat on Telegram, indexed or not (`messages.browse`).
+     * Newest first; go on with `offsetId` until `nextOffsetId` is null.
+     */
+    @GET("api/v1/channels/{id}/messages/search")
+    suspend fun searchMessages(
+        @Path("id") id: String,
+        @Query("kind") kind: String,
+        @Query("q") q: String? = null,
+        @Query("offsetId") offsetId: Long = 0,
+        @Query("limit") limit: Int = 60
+    ): ApiEnvelope<ChatSearchDto>
+
+    @POST("api/v1/channels/{id}/favorite")
+    suspend fun addFavorite(@Path("id") id: String): ApiEnvelope<JsonElement>
+
+    @DELETE("api/v1/channels/{id}/favorite")
+    suspend fun removeFavorite(@Path("id") id: String): ApiEnvelope<JsonElement>
+
+    @POST("api/v1/channels/{id}/hidden")
+    suspend fun hide(@Path("id") id: String): ApiEnvelope<JsonElement>
+
+    @DELETE("api/v1/channels/{id}/hidden")
+    suspend fun unhide(@Path("id") id: String): ApiEnvelope<JsonElement>
+
     /** Starts indexing the files posted since the last scan; answers 409 if one is running. */
     @POST("api/v1/channels/{id}/refresh")
     suspend fun refresh(@Path("id") id: String, @Body body: ChannelRefreshRequest): ApiEnvelope<JsonElement>
 
     @GET("api/v1/channels/{id}/refresh")
     suspend fun refreshRunning(@Path("id") id: String): ApiEnvelope<Boolean>
+
+    /** `data: null` when nothing runs (`channels.refreshProgress`). */
+    @GET("api/v1/channels/{id}/refresh/progress")
+    suspend fun refreshProgress(@Path("id") id: String): ApiEnvelope<ChannelRefreshProgressDto>
+
+    @DELETE("api/v1/channels/{id}/refresh")
+    suspend fun cancelRefresh(@Path("id") id: String): ApiEnvelope<JsonElement>
 
     /** `data: null` until a refresh has finished since the server started. */
     @GET("api/v1/channels/{id}/refresh/result")
@@ -123,6 +174,7 @@ interface LibraryApi {
         @Query("kind") kind: String? = null,
         @Query("search") search: String? = null,
         @Query("status") status: String? = null,
+        @Query("includeHidden") includeHidden: Boolean = false,
         @Query("sortBy") sortBy: String? = "title",
         @Query("sortDescending") sortDescending: Boolean = false,
         @Query("page") page: Int = 1,
@@ -135,11 +187,37 @@ interface LibraryApi {
     @GET("api/v1/library/scan")
     suspend fun scanState(): ApiEnvelope<LibraryScanStateDto>
 
+    @DELETE("api/v1/library/scan")
+    suspend fun cancelScan(): ApiEnvelope<JsonElement>
+
+    @GET("api/v1/library/recent")
+    suspend fun recent(
+        @Query("kind") kind: String? = null,
+        @Query("limit") limit: Int = 30,
+        @Query("includeHidden") includeHidden: Boolean = false
+    ): ApiEnvelope<List<LibraryItemDto>>
+
+    @GET("api/v1/library/watch/history")
+    suspend fun history(
+        @Query("limit") limit: Int = 100,
+        @Query("includeHidden") includeHidden: Boolean = false
+    ): ApiEnvelope<List<LibraryFileDto>>
+
+    @GET("api/v1/library/files/{channelId}/{fileId}")
+    suspend fun file(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<LibraryFileDto>
+
+    /** Downloads the metadata and the episodes of an item again. */
+    @POST("api/v1/library/items/{id}/refresh")
+    suspend fun refreshItem(@Path("id") id: String): ApiEnvelope<JsonElement>
+
     @GET("api/v1/library/items/{id}")
     suspend fun item(@Path("id") id: String): ApiEnvelope<LibraryItemDetailDto>
 
     @GET("api/v1/library/continue")
-    suspend fun continueWatching(@Query("limit") limit: Int = 100): ApiEnvelope<List<LibraryFileDto>>
+    suspend fun continueWatching(
+        @Query("limit") limit: Int = 100,
+        @Query("includeHidden") includeHidden: Boolean = false
+    ): ApiEnvelope<List<LibraryFileDto>>
 
     @GET("api/v1/library/files")
     suspend fun files(
@@ -178,7 +256,17 @@ interface LibraryApi {
     suspend fun markItemWatched(@Path("id") id: String, @Body body: ItemWatchedRequest): ApiEnvelope<LibraryItemDetailDto>
 
     @DELETE("api/v1/library/items/{id}/watched")
-    suspend fun markItemUnwatched(@Path("id") id: String): ApiEnvelope<LibraryItemDetailDto>
+    suspend fun markItemUnwatched(@Path("id") id: String, @Query("season") season: Int? = null): ApiEnvelope<LibraryItemDetailDto>
+
+    @POST("api/v1/library/watch/{channelId}/{fileId}/watched")
+    suspend fun markWatched(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<WatchStateDto>
+
+    @DELETE("api/v1/library/watch/{channelId}/{fileId}/watched")
+    suspend fun markUnwatched(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<WatchStateDto>
+
+    /** Forgets the progress of a file: it leaves "continue watching". */
+    @DELETE("api/v1/library/watch/{channelId}/{fileId}")
+    suspend fun deleteWatch(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<JsonElement>
 
     @GET("api/v1/library/watch/{channelId}/{fileId}")
     suspend fun watch(@Path("channelId") channelId: Long, @Path("fileId") fileId: String): ApiEnvelope<WatchStateDto>

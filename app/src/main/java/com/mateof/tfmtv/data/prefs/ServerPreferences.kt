@@ -47,6 +47,22 @@ enum class CastRouteMode(val label: String) {
     RELAY("A través de este aparato")
 }
 
+/** Focus colour of the whole app. */
+enum class AccentChoice(val label: String) {
+    OCEAN("Océano"),
+    AURORA("Aurora"),
+    EMERALD("Esmeralda"),
+    SUNSET("Atardecer"),
+    RUBY("Rubí")
+}
+
+/** Glows, backdrops and transitions; AUTO turns them off on devices short of memory. */
+enum class EffectsMode(val label: String) {
+    AUTO("Automático"),
+    FULL("Completos"),
+    REDUCED("Reducidos")
+}
+
 @Singleton
 class ServerPreferences @Inject constructor(
     @ApplicationContext private val context: Context
@@ -59,6 +75,13 @@ class ServerPreferences @Inject constructor(
         val SHOW_HIDDEN = booleanPreferencesKey("show_hidden_channels")
         val CAST_ROUTE = stringPreferencesKey("cast_route")
         val CAST_ADDRESSES = stringSetPreferencesKey("cast_addresses")
+        val ACCENT = stringPreferencesKey("accent")
+        val EFFECTS = stringPreferencesKey("effects")
+        val THUMBNAILS = booleanPreferencesKey("video_thumbnails")
+        val AUTOPLAY = booleanPreferencesKey("autoplay_next")
+        val AUDIO_LANGUAGE = stringPreferencesKey("audio_language")
+        val TEXT_LANGUAGE = stringPreferencesKey("text_language")
+        val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -92,6 +115,73 @@ class ServerPreferences @Inject constructor(
     val castRoute: StateFlow<CastRouteMode> = context.dataStore.data
         .map { p -> CastRouteMode.entries.firstOrNull { it.name == p[Keys.CAST_ROUTE] } ?: CastRouteMode.AUTO }
         .stateIn(scope, SharingStarted.Eagerly, CastRouteMode.AUTO)
+
+    val accent: StateFlow<AccentChoice> = context.dataStore.data
+        .map { p -> AccentChoice.entries.firstOrNull { it.name == p[Keys.ACCENT] } ?: AccentChoice.OCEAN }
+        .stateIn(scope, SharingStarted.Eagerly, AccentChoice.OCEAN)
+
+    val effects: StateFlow<EffectsMode> = context.dataStore.data
+        .map { p -> EffectsMode.entries.firstOrNull { it.name == p[Keys.EFFECTS] } ?: EffectsMode.AUTO }
+        .stateIn(scope, SharingStarted.Eagerly, EffectsMode.AUTO)
+
+    /** Previews on the video cards, from the ones Telegram keeps in each message. */
+    val thumbnails: StateFlow<Boolean> = context.dataStore.data
+        .map { it[Keys.THUMBNAILS] ?: true }
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
+    val autoplayNext: StateFlow<Boolean> = context.dataStore.data
+        .map { it[Keys.AUTOPLAY] ?: true }
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
+    /** Last audio and subtitle language picked in the player; [NO_SUBTITLES] when they were turned off. */
+    val audioLanguage: StateFlow<String?> = context.dataStore.data
+        .map { it[Keys.AUDIO_LANGUAGE] }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
+    val textLanguage: StateFlow<String?> = context.dataStore.data
+        .map { it[Keys.TEXT_LANGUAGE] }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
+    val recentSearches: Flow<List<String>> = context.dataStore.data
+        .map { p -> p[Keys.RECENT_SEARCHES].orEmpty().split('\n').filter { it.isNotBlank() } }
+
+    suspend fun saveAccent(value: AccentChoice) {
+        context.dataStore.edit { p -> p[Keys.ACCENT] = value.name }
+    }
+
+    suspend fun saveEffects(value: EffectsMode) {
+        context.dataStore.edit { p -> p[Keys.EFFECTS] = value.name }
+    }
+
+    suspend fun saveThumbnails(value: Boolean) {
+        context.dataStore.edit { p -> p[Keys.THUMBNAILS] = value }
+    }
+
+    suspend fun saveAutoplayNext(value: Boolean) {
+        context.dataStore.edit { p -> p[Keys.AUTOPLAY] = value }
+    }
+
+    suspend fun saveAudioLanguage(value: String) {
+        context.dataStore.edit { p -> p[Keys.AUDIO_LANGUAGE] = value }
+    }
+
+    suspend fun saveTextLanguage(value: String) {
+        context.dataStore.edit { p -> p[Keys.TEXT_LANGUAGE] = value }
+    }
+
+    suspend fun rememberSearch(text: String) {
+        val clean = text.trim().replace('\n', ' ')
+        if (clean.isBlank()) return
+        context.dataStore.edit { p ->
+            val known = p[Keys.RECENT_SEARCHES].orEmpty().split('\n').filter { it.isNotBlank() }
+            p[Keys.RECENT_SEARCHES] = (listOf(clean) + known.filterNot { it.equals(clean, ignoreCase = true) })
+                .take(MAX_SEARCHES).joinToString("\n")
+        }
+    }
+
+    suspend fun forgetSearches() {
+        context.dataStore.edit { p -> p.remove(Keys.RECENT_SEARCHES) }
+    }
 
     /** Televisions typed in by hand: the ones discovery never finds, so they are kept. */
     val castAddresses: Flow<Set<String>> = context.dataStore.data.map { it[Keys.CAST_ADDRESSES].orEmpty() }
@@ -130,4 +220,9 @@ class ServerPreferences @Inject constructor(
     private fun librarySortKey(kind: String) = stringPreferencesKey("library_sort_$kind")
 
     suspend fun awaitLoaded(): ServerConfig = configFlow.first()
+
+    companion object {
+        const val NO_SUBTITLES = "off"
+        private const val MAX_SEARCHES = 8
+    }
 }

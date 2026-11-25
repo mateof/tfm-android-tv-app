@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -113,13 +114,20 @@ private val LocalShellFocused = compositionLocalOf { false }
 @Composable
 fun clickToEditColors(): TextFieldColors {
     val primary = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val container = Color.White.copy(alpha = 0.07f)
     return if (LocalShellFocused.current) {
         OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = Color.White.copy(alpha = 0.13f),
+            focusedContainerColor = container,
             unfocusedBorderColor = primary,
             unfocusedLabelColor = primary,
             unfocusedLeadingIconColor = primary
         )
     } else {
-        OutlinedTextFieldDefaults.colors()
+        OutlinedTextFieldDefaults.colors(
+            unfocusedContainerColor = container,
+            focusedContainerColor = container,
+            unfocusedBorderColor = Color.White.copy(alpha = 0.12f)
+        )
     }
 }

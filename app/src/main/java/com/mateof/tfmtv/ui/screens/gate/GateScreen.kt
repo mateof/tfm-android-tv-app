@@ -12,6 +12,20 @@ import com.mateof.tfmtv.data.api.SystemApi
 import com.mateof.tfmtv.data.prefs.ServerPreferences
 import com.mateof.tfmtv.ui.components.ErrorState
 import com.mateof.tfmtv.ui.components.Loading
+import com.mateof.tfmtv.ui.components.Logo
+import com.mateof.tfmtv.ui.components.PillButton
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,9 +83,17 @@ fun GateScreen(onSetup: () -> Unit, onReady: () -> Unit) {
 
     when {
         state.error != null -> ErrorState(
-            message = state.error!!,
-            onRetry = onSetup
-        )
-        else -> Loading()
+            message = "No se puede conectar con el servidor: ${state.error!!}",
+            onRetry = vm::check
+        ) {
+            PillButton("Cambiar servidor", Icons.Outlined.Dns, onSetup)
+        }
+        else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Logo(84)
+                Text("TFM TV", style = MaterialTheme.typography.headlineMedium)
+                Loading(Modifier.size(60.dp))
+            }
+        }
     }
 }

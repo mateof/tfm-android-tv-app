@@ -40,4 +40,19 @@ class MediaUrls @Inject constructor(private val prefs: ServerPreferences) {
 
     fun channelImage(channelId: Long): String? =
         withKey("/api/v1/channels/$channelId/image")
+
+    /** The preview Telegram keeps in the message: the server never reads the video for it. */
+    fun messageThumbnail(channelId: Long, messageId: Long): String? =
+        absolute("/api/v1/channels/$channelId/messages/$messageId/thumbnail")
+
+    /** The attachment of a message, whether it is indexed or not. */
+    fun messageContent(channelId: Long, messageId: Long): String =
+        "/api/v1/channels/$channelId/messages/$messageId/content"
+
+    /** A library image in another of the sizes the server resizes to (`w92`…`w1280`). */
+    fun libraryImage(url: String?, size: String): String? {
+        val abs = absolute(url) ?: return null
+        if (!abs.contains("/api/v1/library/images/")) return abs
+        return abs.substringBefore('?') + "?size=" + size
+    }
 }

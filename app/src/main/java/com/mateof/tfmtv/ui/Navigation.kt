@@ -1,6 +1,11 @@
 package com.mateof.tfmtv.ui
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -72,7 +77,15 @@ fun TfmTvNavHost(modifier: Modifier = Modifier) {
         if (route != Routes.CAST) openCast()
     }
 
-    NavHost(navController = nav, startDestination = Routes.GATE, modifier = modifier) {
+    NavHost(
+        navController = nav,
+        startDestination = Routes.GATE,
+        modifier = modifier,
+        enterTransition = { fadeIn(tween(240)) + scaleIn(tween(260), initialScale = 0.985f) },
+        exitTransition = { fadeOut(tween(160)) },
+        popEnterTransition = { fadeIn(tween(220)) },
+        popExitTransition = { fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 0.985f) }
+    ) {
 
         composable(Routes.GATE) {
             GateScreen(
